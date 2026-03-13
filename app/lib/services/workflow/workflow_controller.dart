@@ -19,7 +19,7 @@ class WorkflowController extends ChangeNotifier {
     _prefs = await SharedPreferences.getInstance();
     final String? raw = _prefs?.getString(_storageKey);
 
-    // no saved state yet? cool, start from defaults.
+    // no saved state yet?  start from defaults.
     if (raw == null || raw.trim().isEmpty) {
       _state = WorkflowState.defaults();
       unawaited(_persist());
