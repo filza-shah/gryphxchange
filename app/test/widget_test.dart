@@ -9,13 +9,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:app/main.dart';
+import 'package:app/services/workflow/workflow_controller.dart';
 
 void main() {
-  testWidgets('Loads GryphXChange themed shell', (WidgetTester tester) async {
-    await tester.pumpWidget(const GryphXChangeApp());
+  testWidgets('Loads wishlist screen', (WidgetTester tester) async {
+    final WorkflowController workflowController = WorkflowController();
+    await tester.pumpWidget(
+      GryphXChangeApp(workflowController: workflowController),
+    );
 
-    expect(find.text('GryphXChange'), findsOneWidget);
-    expect(find.text('Theme Imported'), findsOneWidget);
-    expect(find.byType(FilledButton), findsOneWidget);
+    expect(find.text('Wishlist'), findsWidgets);
+    expect(find.text('Add to Wishlist'), findsOneWidget);
+    expect(find.byType(TabBar), findsOneWidget);
   });
 }
