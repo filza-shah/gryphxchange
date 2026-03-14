@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/widgets/star_rating.dart';
 import '../../models/mock_data.dart';
@@ -216,9 +217,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                       onPressed: _canSubmitOffer
                           ? () {
                               Navigator.of(context).pop();
-                              Navigator.of(
-                                this.context,
-                              ).pushReplacementNamed('/trades');
+                              this.context.go('/trades');
                             }
                           : null,
                       style: FilledButton.styleFrom(
@@ -269,8 +268,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
               child: Row(
                 children: <Widget>[
                   IconButton(
-                    onPressed: () =>
-                        Navigator.of(context).pushReplacementNamed('/home'),
+                    onPressed: () => context.go('/home'),
                     icon: const Icon(Icons.arrow_back, color: Colors.white),
                   ),
                   const Text(

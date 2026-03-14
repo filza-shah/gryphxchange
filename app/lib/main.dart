@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'core/widgets/app_bottom_nav.dart';
-import 'features/listing/listing_detail_page.dart';
-import 'features/wishlist/wishlist_page.dart';
+import 'core/providers/workflow_provider.dart';
+import 'core/router/app_router.dart';
 import 'services/workflow/workflow_controller.dart';
 
+// custom color constants for app theme
 const Color _gryphRed = Color(0xFF8B0000);
 const Color _gryphGold = Color(0xFFFFD700);
 const Color _shellBackground = Color(0xFF101114);
@@ -14,70 +15,51 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final WorkflowController workflowController = WorkflowController();
   await workflowController.init();
-  runApp(GryphXChangeApp(workflowController: workflowController));
+
+  runApp(
+    ProviderScope(
+      overrides: <Override>[
+        workflowControllerProvider.overrideWithValue(workflowController),
+      ],
+      child: const GryphXChangeApp(),
+    ),
+  );
 }
 
-class GryphXChangeApp extends StatelessWidget {
-  const GryphXChangeApp({super.key, required this.workflowController});
-
-  final WorkflowController workflowController;
-
-  Route<dynamic> _onGenerateRoute(RouteSettings settings) {
-    final String name = settings.name ?? '/wishlist';
-    final Uri uri = Uri.parse(name);
-
-    if (uri.path == '/wishlist' || uri.path == '/') {
-      return MaterialPageRoute<dynamic>(
-        builder: (_) => WishlistPage(workflowController: workflowController),
-        settings: settings,
-      );
-    }
-    if (uri.pathSegments.length == 2 && uri.pathSegments.first == 'listing') {
-      return MaterialPageRoute<dynamic>(
-        builder: (_) => ListingDetailPage(listingId: uri.pathSegments[1]),
-        settings: settings,
-      );
-    }
-    if (uri.path == '/home' ||
-        uri.path == '/create' ||
-        uri.path == '/trades' ||
-        uri.path == '/profile') {
-      return MaterialPageRoute<dynamic>(
-        builder: (_) => _PlaceholderPage(route: uri.path),
-        settings: settings,
-      );
-    }
-
-    return MaterialPageRoute<dynamic>(
-      builder: (_) => WishlistPage(workflowController: workflowController),
-      settings: settings,
-    );
-  }
+class GryphXChangeApp extends ConsumerWidget {
+  const GryphXChangeApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // overall app theme
     final ThemeData theme = ThemeData(
       useMaterial3: true,
       scaffoldBackgroundColor: _pageBackground,
       colorScheme: ColorScheme.fromSeed(
         seedColor: _gryphRed,
-        primary: _gryphRed,
-        secondary: _gryphGold,
+        primary: _gryphRed, // main color for app elements
+        secondary: _gryphGold, // accent color for highlights
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: _gryphRed,
-        foregroundColor: Colors.white,
+        backgroundColor: _gryphRed, // AppBar background color
+        foregroundColor: Colors.white, // AppBar text and icon color
       ),
+      // filled button style
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: _gryphRed,
           foregroundColor: Colors.white,
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+          textStyle: const TextStyle(
+            fontWeight: FontWeight.w600,
+          ), // button text style
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(
+              10,
+            ), // rounded corners for buttons
           ),
         ),
       ),
+      // rounded card with with white background color and elevation
       cardTheme: CardThemeData(
         color: Colors.white,
         elevation: 1,
@@ -89,12 +71,13 @@ class GryphXChangeApp extends StatelessWidget {
       ),
     );
 
-    return MaterialApp(
+    final router = ref.watch(appRouterProvider);
+
+    return MaterialApp.router(
       title: 'GryphXChange',
       debugShowCheckedModeBanner: false,
       theme: theme,
-      initialRoute: '/wishlist',
-      onGenerateRoute: _onGenerateRoute,
+      routerConfig: router,
       builder: (BuildContext context, Widget? child) {
         return Container(
           color: _shellBackground,
@@ -109,41 +92,6 @@ class GryphXChangeApp extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class _PlaceholderPage extends StatelessWidget {
-  const _PlaceholderPage({required this.route});
-
-  final String route;
-
-  String get _title {
-    switch (route) {
-      case '/home':
-        return 'Home';
-      case '/create':
-        return 'Create Listing';
-      case '/trades':
-        return 'Trades';
-      case '/profile':
-        return 'Profile';
-      default:
-        return 'Page';
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(_title)),
-      bottomNavigationBar: AppBottomNav(currentRoute: route),
-      body: Center(
-        child: Text(
-          '$_title page is not ported yet.',
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-      ),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/widgets/app_bottom_nav.dart';
 import '../../models/mock_data.dart';
@@ -304,7 +305,7 @@ class _WishlistPageState extends State<WishlistPage> {
                                       const SizedBox(height: 8),
                                       OutlinedButton(
                                         onPressed: () {
-                                          Navigator.of(context).pushNamed(
+                                          context.push(
                                             '/listing/${match.listingId}',
                                           );
                                         },

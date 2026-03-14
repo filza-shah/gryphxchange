@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 class AppBottomNav extends StatelessWidget {
   const AppBottomNav({super.key, required this.currentRoute});
@@ -52,7 +53,7 @@ class AppBottomNav extends StatelessWidget {
         if (targetRoute == currentRoute) {
           return;
         }
-        Navigator.of(context).pushReplacementNamed(targetRoute);
+        context.go(targetRoute);
       },
       items: const <BottomNavigationBarItem>[
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
