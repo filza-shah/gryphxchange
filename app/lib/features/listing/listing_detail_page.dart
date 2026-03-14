@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-
 import '../../core/widgets/star_rating.dart';
 import '../../models/mock_data.dart';
 
