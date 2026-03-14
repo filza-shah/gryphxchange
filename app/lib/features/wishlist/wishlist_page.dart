@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-
+import '../../core/widgets/app_header.dart';
 import '../../core/widgets/app_bottom_nav.dart';
 import '../../models/mock_data.dart';
 import '../../services/workflow/workflow_controller.dart';
@@ -124,21 +124,8 @@ class _WishlistPageState extends State<WishlistPage> {
             bottomNavigationBar: const AppBottomNav(currentRoute: '/wishlist'),
             body: Column(
               children: <Widget>[
-                Container(
-                  color: const Color(0xFF8B0000),
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
-                  child: const SafeArea(
-                    bottom: false,
-                    child: Text(
-                      'Wishlist',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 30,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+                AppHeader(
+                  title: 'Wishlist',
                 ),
                 TabBar(
                   labelColor: const Color(0xFF8B0000),
