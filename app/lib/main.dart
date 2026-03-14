@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+// custom color constants for app theme
 const Color _gryphRed = Color(0xFF8B0000);
 const Color _gryphGold = Color(0xFFFFD700);
 const Color _shellBackground = Color(0xFF101114);
@@ -14,33 +15,40 @@ class GryphXChangeApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    //overall app theme 
     final ThemeData theme = ThemeData(
       useMaterial3: true,
       scaffoldBackgroundColor: _pageBackground,
       colorScheme: ColorScheme.fromSeed(
         seedColor: _gryphRed,
-        primary: _gryphRed,
-        secondary: _gryphGold,
+        primary: _gryphRed, //main color for app elements
+        secondary: _gryphGold, // accent color for highlights 
       ),
+
       appBarTheme: const AppBarTheme(
-        backgroundColor: _gryphRed,
-        foregroundColor: Colors.white,
+        backgroundColor: _gryphRed, // AppBar background color 
+        foregroundColor: Colors.white, // AppBar text and icon color 
       ),
+
+      // filled button style 
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: _gryphRed,
           foregroundColor: Colors.white,
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600), // button text style
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(10), // rounded corners for buttons
           ),
         ),
       ),
+
+      // rounded card with with white background color and elevation 
       cardTheme: CardThemeData(
         color: Colors.white,
         elevation: 1,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
+      
       textTheme: const TextTheme(
         bodyLarge: TextStyle(fontFamily: 'Inter'),
         bodyMedium: TextStyle(fontFamily: 'Inter'),
@@ -70,6 +78,7 @@ class GryphXChangeApp extends StatelessWidget {
   }
 }
 
+//Page to preview the app's theme and widgtes 
 class ThemePreviewPage extends StatelessWidget {
   const ThemePreviewPage({super.key});
 
@@ -99,12 +108,14 @@ class ThemePreviewPage extends StatelessWidget {
               ),
             ),
           ),
+          //filled button with icon example
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: () {},
             icon: const Icon(Icons.swap_horiz),
             label: const Text('Create Trade'),
           ),
+          //outlined box example
           const SizedBox(height: 12),
           OutlinedButton(
             onPressed: () {},
@@ -115,6 +126,7 @@ class ThemePreviewPage extends StatelessWidget {
             child: const Text('Secondary Action'),
           ),
           const SizedBox(height: 20),
+          //chips to show color theme
           Wrap(
             spacing: 8,
             runSpacing: 8,
