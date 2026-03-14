@@ -6,16 +6,26 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:app/core/providers/workflow_provider.dart';
 import 'package:app/main.dart';
+import 'package:app/services/workflow/workflow_controller.dart';
 
 void main() {
-  testWidgets('Loads GryphXChange themed shell', (WidgetTester tester) async {
-    await tester.pumpWidget(const GryphXChangeApp());
+  testWidgets('Loads login screen', (WidgetTester tester) async {
+    final WorkflowController workflowController = WorkflowController();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: <Override>[
+          workflowControllerProvider.overrideWithValue(workflowController),
+        ],
+        child: const GryphXChangeApp(),
+      ),
+    );
 
-    expect(find.text('GryphXChange'), findsOneWidget);
-    expect(find.text('Theme Imported'), findsOneWidget);
+    expect(find.text('Login'), findsOneWidget);
     expect(find.byType(FilledButton), findsOneWidget);
   });
 }

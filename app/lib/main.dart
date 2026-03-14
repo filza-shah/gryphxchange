@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'core/providers/workflow_provider.dart';
 import 'core/router/app_router.dart';
+import 'services/workflow/workflow_controller.dart';
 
 // custom color constants for app theme
 const Color _gryphRed = Color(0xFF8B0000);
@@ -8,8 +11,19 @@ const Color _gryphGold = Color(0xFFFFD700);
 const Color _shellBackground = Color(0xFF101114);
 const Color _pageBackground = Color(0xFFF5F5F5);
 
-void main() {
-  runApp(const ProviderScope(child: GryphXChangeApp())); // Wrap app in provider scope for riverpod
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final WorkflowController workflowController = WorkflowController();
+  await workflowController.init();
+
+  runApp(
+    ProviderScope(
+      overrides: <Override>[
+        workflowControllerProvider.overrideWithValue(workflowController),
+      ],
+      child: const GryphXChangeApp(),
+    ),
+  );
 }
 
 class GryphXChangeApp extends ConsumerWidget {
@@ -17,40 +31,40 @@ class GryphXChangeApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    //overall app theme 
+    // overall app theme
     final ThemeData theme = ThemeData(
       useMaterial3: true,
       scaffoldBackgroundColor: _pageBackground,
       colorScheme: ColorScheme.fromSeed(
         seedColor: _gryphRed,
-        primary: _gryphRed, //main color for app elements
-        secondary: _gryphGold, // accent color for highlights 
+        primary: _gryphRed, // main color for app elements
+        secondary: _gryphGold, // accent color for highlights
       ),
-
       appBarTheme: const AppBarTheme(
-        backgroundColor: _gryphRed, // AppBar background color 
-        foregroundColor: Colors.white, // AppBar text and icon color 
+        backgroundColor: _gryphRed, // AppBar background color
+        foregroundColor: Colors.white, // AppBar text and icon color
       ),
-
-      // filled button style 
+      // filled button style
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: _gryphRed,
           foregroundColor: Colors.white,
-          textStyle: const TextStyle(fontWeight: FontWeight.w600), // button text style
+          textStyle: const TextStyle(
+            fontWeight: FontWeight.w600,
+          ), // button text style
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10), // rounded corners for buttons
+            borderRadius: BorderRadius.circular(
+              10,
+            ), // rounded corners for buttons
           ),
         ),
       ),
-
-      // rounded card with with white background color and elevation 
+      // rounded card with with white background color and elevation
       cardTheme: CardThemeData(
         color: Colors.white,
         elevation: 1,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
-
       textTheme: const TextTheme(
         bodyLarge: TextStyle(fontFamily: 'Inter'),
         bodyMedium: TextStyle(fontFamily: 'Inter'),
@@ -81,5 +95,3 @@ class GryphXChangeApp extends ConsumerWidget {
     );
   }
 }
-
-
