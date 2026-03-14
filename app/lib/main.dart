@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/router/app_router.dart';
 
 // custom color constants for app theme
 const Color _gryphRed = Color(0xFF8B0000);
@@ -7,14 +9,14 @@ const Color _shellBackground = Color(0xFF101114);
 const Color _pageBackground = Color(0xFFF5F5F5);
 
 void main() {
-  runApp(const GryphXChangeApp());
+  runApp(const ProviderScope(child: GryphXChangeApp())); // Wrap app in provider scope for riverpod
 }
 
-class GryphXChangeApp extends StatelessWidget {
+class GryphXChangeApp extends ConsumerWidget {
   const GryphXChangeApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     //overall app theme 
     final ThemeData theme = ThemeData(
       useMaterial3: true,
@@ -48,17 +50,20 @@ class GryphXChangeApp extends StatelessWidget {
         elevation: 1,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
-      
+
       textTheme: const TextTheme(
         bodyLarge: TextStyle(fontFamily: 'Inter'),
         bodyMedium: TextStyle(fontFamily: 'Inter'),
       ),
     );
 
-    return MaterialApp(
+    final router = ref.watch(appRouterProvider);
+
+    return MaterialApp.router(
       title: 'GryphXChange',
       debugShowCheckedModeBanner: false,
       theme: theme,
+      routerConfig: router,
       builder: (BuildContext context, Widget? child) {
         return Container(
           color: _shellBackground,
@@ -73,71 +78,8 @@ class GryphXChangeApp extends StatelessWidget {
           ),
         );
       },
-      home: const ThemePreviewPage(),
     );
   }
 }
 
-//Page to preview the app's theme and widgtes 
-class ThemePreviewPage extends StatelessWidget {
-  const ThemePreviewPage({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('GryphXChange')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: <Widget>[
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    'Theme Imported',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'test',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          //filled button with icon example
-          const SizedBox(height: 16),
-          FilledButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.swap_horiz),
-            label: const Text('Create Trade'),
-          ),
-          //outlined box example
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: () {},
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _gryphRed,
-              side: const BorderSide(color: _gryphRed),
-            ),
-            child: const Text('Secondary Action'),
-          ),
-          const SizedBox(height: 20),
-          //chips to show color theme
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: const <Widget>[
-              Chip(label: Text('Maroon Primary')),
-              Chip(label: Text('Gold Accent')),
-              Chip(label: Text('Mobile Frame')),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
