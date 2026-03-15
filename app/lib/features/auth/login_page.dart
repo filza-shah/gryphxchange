@@ -114,10 +114,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    const Icon(
-                      Icons.school_rounded,
-                      color: Color(0xFF8B0000),
-                      size: 64,
+                    Image.asset(
+                      'assets/images/gryphxchange_logo.png',
+                      width: 120,
+                      height: 120,
+                      fit: BoxFit.contain,
                     ),
                     const SizedBox(height: 10),
                     const Text(
