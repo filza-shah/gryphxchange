@@ -91,8 +91,8 @@ class SafeZone {
 // mock dataset for local UI/dev flow until api wiring is in.
 const AppUser currentUser = AppUser(
   id: 'user-1',
-  name: 'Sarah Johnson',
-  email: 'sjohnson@uoguelph.ca',
+  name: 'Lebron James',
+  email: 'ljames@uoguelph.ca',
   rating: 4.8,
   totalRatings: 24,
 );
