@@ -213,7 +213,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Exclusively for verified @uoguelph.ca students',
+                      "Don't have an account yet? Sign up",
                       style: TextStyle(
                         color: Colors.grey.shade600,
                         fontSize: 12,
