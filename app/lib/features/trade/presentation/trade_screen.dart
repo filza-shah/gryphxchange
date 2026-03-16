@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../services/workflow/workflow_state.dart';
-import '../providers/trade_provider.dart';
+import '../../../core/widgets/app_bottom_nav.dart';
 import '../models/display_trade.dart';
+import 'providers/display_trades_provider.dart';
 import 'widgets/transaction_card.dart';
 
 class TradeScreen extends ConsumerWidget {
@@ -14,20 +14,24 @@ class TradeScreen extends ConsumerWidget {
 
     return tradesAsync.when(
       data: (trades) {
-        final pending = trades.where((t) => t.workflowStatus == WorkflowTradeStatus.pending).toList();
-        final active = trades.where((t) =>
-            t.workflowStatus == WorkflowTradeStatus.accepted ||
-            t.workflowStatus == WorkflowTradeStatus.scheduled ||
-            t.workflowStatus == WorkflowTradeStatus.ready).toList();
-        final completed = trades.where((t) => t.workflowStatus == WorkflowTradeStatus.completed).toList();
+        final pending = trades
+            .where((DisplayTrade trade) => trade.isPending)
+            .toList(growable: false);
+        final active = trades
+            .where((DisplayTrade trade) => trade.isActive)
+            .toList(growable: false);
+        final completed = trades
+            .where((DisplayTrade trade) => trade.isCompleted)
+            .toList(growable: false);
 
         return DefaultTabController(
           length: 3,
           child: Scaffold(
+            bottomNavigationBar: const AppBottomNav(currentRoute: '/trades'),
             appBar: AppBar(
               title: const Text('Active Trades'),
               bottom: TabBar(
-                tabs: [
+                tabs: <Widget>[
                   Tab(text: 'PENDING (${pending.length})'),
                   Tab(text: 'ACTIVE (${active.length})'),
                   Tab(text: 'COMPLETED (${completed.length})'),
@@ -47,8 +51,14 @@ class TradeScreen extends ConsumerWidget {
           ),
         );
       },
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (err, stack) => Scaffold(body: Center(child: Text('Error: $err'))),
+      loading: () => const Scaffold(
+        bottomNavigationBar: AppBottomNav(currentRoute: '/trades'),
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (err, _) => Scaffold(
+        bottomNavigationBar: const AppBottomNav(currentRoute: '/trades'),
+        body: Center(child: Text('Error: $err')),
+      ),
     );
   }
 
