@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/home/home_page.dart';
 import '../../features/listing/listing_detail_page.dart';
+import '../../features/profile/profile_page.dart';
 import '../../features/wishlist/wishlist_page.dart';
 import '../providers/auth_provider.dart';
 import '../providers/workflow_provider.dart';
@@ -46,8 +47,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/profile',
-        builder: (context, state) =>
-            const _PlaceholderPage(title: 'Profile', route: '/profile'),
+        builder: (context, state) => ProfilePage(
+          workflowController: ref.read(workflowControllerProvider),
+        ),
       ),
     ],
   );
