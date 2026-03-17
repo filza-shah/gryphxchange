@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../features/command/command_center_page.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/home/home_page.dart';
+import '../../features/listing/create_listing_page.dart';
 import '../../features/listing/listing_detail_page.dart';
 import '../../features/profile/profile_page.dart';
 import '../../features/wishlist/wishlist_page.dart';
@@ -37,13 +39,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/create',
-        builder: (context, state) =>
-            const _PlaceholderPage(title: 'Create Listing', route: '/create'),
+        builder: (context, state) => const CreateListingPage(),
       ),
       GoRoute(
         path: '/trades',
         builder: (context, state) =>
             const _PlaceholderPage(title: 'Trades', route: '/trades'),
+      ),
+      GoRoute(
+        path: '/command/:tradeId',
+        builder: (context, state) => CommandCenterPage(
+          tradeId: state.pathParameters['tradeId']!,
+          workflowController: ref.read(workflowControllerProvider),
+        ),
       ),
       GoRoute(
         path: '/profile',
