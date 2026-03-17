@@ -3,6 +3,7 @@ import '../../../services/workflow/workflow_state.dart';
 class DisplayTrade {
   const DisplayTrade({
     required this.id,
+    required this.listingId,
     required this.itemTitle,
     required this.otherUserName,
     required this.otherUserInitial,
@@ -11,6 +12,7 @@ class DisplayTrade {
   });
 
   final String id;
+  final String listingId;
   final String itemTitle;
   final String otherUserName;
   final String otherUserInitial;

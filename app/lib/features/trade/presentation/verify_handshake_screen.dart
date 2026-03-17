@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers/workflow_provider.dart';
 import '../models/display_trade.dart';
+import 'providers/display_trades_provider.dart';
 import 'providers/verify_handshake_provider.dart';
 import 'widgets/verify_steps/generate_qr_step.dart';
 import 'widgets/verify_steps/scan_verify_step.dart';
@@ -55,6 +57,7 @@ class VerifyHandshakeScreen extends ConsumerWidget {
           Expanded(
             child: _buildStepContent(
               context,
+              ref,
               verificationState,
               verificationNotifier,
             ),
@@ -66,6 +69,7 @@ class VerifyHandshakeScreen extends ConsumerWidget {
 
   Widget _buildStepContent(
     BuildContext context,
+    WidgetRef ref,
     VerificationState state,
     VerificationNotifier notifier,
   ) {
@@ -88,8 +92,18 @@ class VerifyHandshakeScreen extends ConsumerWidget {
           transactionId: state.transactionId,
           onRated: notifier.recordRating,
           onComplete: () {
+            final workflowController = ref.read(workflowControllerProvider);
+            workflowController.completeTransaction(
+              trade.id,
+              trade.listingId,
+              trade.mode,
+            );
+            ref.invalidate(displayTradesProvider);
+
             // Navigate back to trades screen on completion
-            Navigator.of(context).popUntil((route) => route.isFirst);
+            if (context.mounted) {
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            }
           },
         );
     }

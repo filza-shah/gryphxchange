@@ -22,6 +22,7 @@ final displayTradesProvider = FutureProvider<List<DisplayTrade>>((ref) async {
 
       return DisplayTrade(
         id: tradeId,
+        listingId: trade.listingId,
         itemTitle: trade.listing.title,
         otherUserName: sellerName,
         otherUserInitial: sellerName.isEmpty ? '?' : sellerName[0],
