@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../models/display_trade.dart';
 
@@ -88,7 +89,11 @@ class TransactionCard extends StatelessWidget {
                 Expanded(
                   child: FilledButton(
                     onPressed: () {
-                      debugPrint('Verify transaction ${trade.id}');
+                      // Navigate to verify handshake flow
+                      context.push(
+                        '/verify-handshake/${trade.id}',
+                        extra: trade,
+                      );
                     },
                     style: FilledButton.styleFrom(
                       backgroundColor: red,
