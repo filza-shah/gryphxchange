@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/star_rating.dart';
 import '../../models/mock_data.dart';
+import 'widgets/offer_dialog.dart';
 
 class ListingDetailPage extends StatefulWidget {
   const ListingDetailPage({super.key, required this.listingId});
@@ -13,7 +14,6 @@ class ListingDetailPage extends StatefulWidget {
 }
 
 class _ListingDetailPageState extends State<ListingDetailPage> {
-  String _offerType = 'cash';
   final TextEditingController _cashAmountController = TextEditingController();
   final TextEditingController _cashTopUpController = TextEditingController();
   final TextEditingController _meetupDateController = TextEditingController();
@@ -50,183 +50,36 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
     if (_meetupDateController.text.trim().isEmpty || _meetupLocation.isEmpty) {
       return false;
     }
-
-    if (_offerType == 'cash') {
-      return _cashAmountController.text.trim().isNotEmpty;
-    }
-
     return _selectedTradeItem.isNotEmpty;
   }
 
-  Future<void> _openOfferDialog() async {
-    // all offer inputs live in one dialog so user stays in context.
+  Future<void> _openOfferDialog(Listing listing) async {
     await showDialog<void>(
       context: context,
       builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder:
-              (
-                BuildContext context,
-                void Function(void Function()) setDialogState,
-              ) {
-                return AlertDialog(
-                  title: const Text('Make an Offer'),
-                  content: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        const Text(
-                          'Offer Type',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 8),
-                        SegmentedButton<String>(
-                          segments: const <ButtonSegment<String>>[
-                            ButtonSegment<String>(
-                              value: 'cash',
-                              icon: Icon(Icons.attach_money),
-                              label: Text('Cash'),
-                            ),
-                            ButtonSegment<String>(
-                              value: 'trade',
-                              icon: Icon(Icons.swap_horiz),
-                              label: Text('Trade'),
-                            ),
-                          ],
-                          selected: <String>{_offerType},
-                          onSelectionChanged: (Set<String> value) {
-                            setDialogState(() {
-                              _offerType = value.first;
-                            });
-                            setState(() {});
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        if (_offerType == 'cash')
-                          TextField(
-                            controller: _cashAmountController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Your Offer (CAD)',
-                              prefixText: '\$',
-                              border: OutlineInputBorder(),
-                            ),
-                            onChanged: (_) {
-                              setDialogState(() {});
-                              setState(() {});
-                            },
-                          )
-                        else
-                          Column(
-                            children: <Widget>[
-                              DropdownButtonFormField<String>(
-                                initialValue: _selectedTradeItem.isEmpty
-                                    ? null
-                                    : _selectedTradeItem,
-                                decoration: const InputDecoration(
-                                  labelText: 'Select Your Item to Trade',
-                                  border: OutlineInputBorder(),
-                                ),
-                                items: const <DropdownMenuItem<String>>[
-                                  DropdownMenuItem(
-                                    value: 'listing-1',
-                                    child: Text('Data Structures Textbook'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'listing-3',
-                                    child: Text('Organic Chemistry Lab Manual'),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'listing-6',
-                                    child: Text('Python Programming Textbook'),
-                                  ),
-                                ],
-                                onChanged: (String? value) {
-                                  setDialogState(() {
-                                    _selectedTradeItem = value ?? '';
-                                  });
-                                  setState(() {});
-                                },
-                              ),
-                              const SizedBox(height: 12),
-                              TextField(
-                                controller: _cashTopUpController,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: 'Cash Top-up (Optional)',
-                                  prefixText: '\$',
-                                  border: OutlineInputBorder(),
-                                ),
-                              ),
-                            ],
-                          ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Proposed Meetup',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _meetupDateController,
-                          readOnly: true,
-                          onTap: () async {
-                            await _pickDateTime();
-                            setDialogState(() {});
-                          },
-                          decoration: const InputDecoration(
-                            labelText: 'Date & Time',
-                            border: OutlineInputBorder(),
-                            suffixIcon: Icon(Icons.calendar_month),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          initialValue: _meetupLocation.isEmpty
-                              ? null
-                              : _meetupLocation,
-                          decoration: const InputDecoration(
-                            labelText: 'Safe Exchange Zone',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: campusSafeZones
-                              .map(
-                                (SafeZone zone) => DropdownMenuItem<String>(
-                                  value: zone.id.toString(),
-                                  child: Text(zone.name),
-                                ),
-                              )
-                              .toList(growable: false),
-                          onChanged: (String? value) {
-                            setDialogState(() {
-                              _meetupLocation = value ?? '';
-                            });
-                            setState(() {});
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  actions: <Widget>[
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
-                    ),
-                    FilledButton(
-                      onPressed: _canSubmitOffer
-                          ? () {
-                              Navigator.of(context).pop();
-                              this.context.go('/trades');
-                            }
-                          : null,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF8B0000),
-                      ),
-                      child: const Text('Submit Offer'),
-                    ),
-                  ],
-                );
-              },
+        return OfferDialog(
+          offerType: listing.isTrade ? 'trade' : 'cash',
+          cashAmountController: _cashAmountController,
+          cashTopUpController: _cashTopUpController,
+          meetupDateController: _meetupDateController,
+          selectedTradeItem: _selectedTradeItem,
+          meetupLocation: _meetupLocation,
+          onTradeItemChanged: (String? value) {
+            setState(() {
+              _selectedTradeItem = value ?? '';
+            });
+          },
+          onMeetupLocationChanged: (String? value) {
+            setState(() {
+              _meetupLocation = value ?? '';
+            });
+          },
+          onPickDateTime: _pickDateTime,
+          canSubmitOffer: _canSubmitOffer,
+          onSubmitOffer: () {
+            Navigator.of(context).pop();
+            this.context.go('/trades');
+          },
         );
       },
     );
@@ -456,7 +309,9 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton(
-                          onPressed: _openOfferDialog,
+                          onPressed: (){
+                             _openOfferDialog(listing);
+                          },
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFF8B0000),
                             padding: const EdgeInsets.symmetric(vertical: 14),
