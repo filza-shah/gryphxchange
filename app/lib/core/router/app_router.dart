@@ -6,11 +6,13 @@ import '../../features/auth/login_page.dart';
 import '../../features/home/home_page.dart';
 import '../../features/listing/create_listing_page.dart';
 import '../../features/listing/listing_detail_page.dart';
-import '../../features/profile/profile_page.dart';
 import '../../features/wishlist/wishlist_page.dart';
 import '../providers/auth_provider.dart';
 import '../providers/workflow_provider.dart';
 import '../widgets/app_bottom_nav.dart';
+import '../../features/trade/presentation/trade_screen.dart';
+import '../../features/trade/presentation/verify_handshake_screen.dart';
+import '../../features/trade/models/display_trade.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -43,8 +45,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/trades',
-        builder: (context, state) =>
-            const _PlaceholderPage(title: 'Trades', route: '/trades'),
+        builder: (context, state) => const TradeScreen(),
+      ),
+      GoRoute(
+        path: '/verify-handshake/:tradeId',
+        builder: (context, state) {
+          final trade = state.extra as DisplayTrade;
+          return VerifyHandshakeScreen(trade: trade);
+        },
       ),
       GoRoute(
         path: '/command/:tradeId',
@@ -55,9 +63,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/profile',
-        builder: (context, state) => ProfilePage(
-          workflowController: ref.read(workflowControllerProvider),
-        ),
+        builder: (context, state) =>
+            const _PlaceholderPage(title: 'Profile', route: '/profile'),
       ),
     ],
   );

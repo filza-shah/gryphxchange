@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
 import '../../models/display_trade.dart';
-import '../../../../services/workflow/workflow_state.dart';
 
 class TransactionCard extends StatelessWidget {
   final DisplayTrade trade;
@@ -10,7 +11,7 @@ class TransactionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final red = const Color(0xFF8B0000); // matches your theme
+    final red = const Color(0xFF8B0000);
     final gold = const Color(0xFFFFD700);
 
     return Card(
@@ -37,17 +38,11 @@ class TransactionCard extends StatelessWidget {
                   backgroundColor: red.withOpacity(0.1),
                   child: Text(
                     trade.otherUserInitial,
-                    style: TextStyle(
-                      color: red,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(color: red, fontWeight: FontWeight.bold),
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  trade.otherUserName,
-                  style: theme.textTheme.bodyMedium,
-                ),
+                Text(trade.otherUserName, style: theme.textTheme.bodyMedium),
               ],
             ),
             const SizedBox(height: 8),
@@ -58,7 +53,7 @@ class TransactionCard extends StatelessWidget {
                 Icon(
                   Icons.compare_arrows,
                   size: 16,
-                  color: trade.mode == TransactionMode.trade ? red : gold,
+                  color: trade.isTradeMode ? red : gold,
                 ),
                 const SizedBox(width: 4),
                 Expanded(
@@ -73,14 +68,12 @@ class TransactionCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // Two buttons
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () {
-                      // TODO: Navigate to command center
-                      print('Open Command Center for ${trade.id}');
+                      debugPrint('Open Trade Center for ${trade.id}');
                     },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: red,
@@ -89,15 +82,18 @@ class TransactionCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: const Text('Open Command Center'),
+                    child: const Text('Trade Center'),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton(
                     onPressed: () {
-                      // TODO: Trigger verification (QR scan)
-                      print('Verify transaction ${trade.id}');
+                      // Navigate to verify handshake flow
+                      context.push(
+                        '/verify-handshake/${trade.id}',
+                        extra: trade,
+                      );
                     },
                     style: FilledButton.styleFrom(
                       backgroundColor: red,
