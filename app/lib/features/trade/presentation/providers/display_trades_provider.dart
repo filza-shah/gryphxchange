@@ -4,6 +4,7 @@ import '../../../../core/providers/workflow_provider.dart';
 import '../../data/trade_repository.dart';
 import '../../models/display_trade.dart';
 
+// Provider to fetch and prepare the list of trades for display in the UI.
 final displayTradesProvider = FutureProvider<List<DisplayTrade>>((ref) async {
   final workflowController = ref.watch(workflowControllerProvider);
   final tradeRepository = ref.watch(tradeRepositoryProvider);

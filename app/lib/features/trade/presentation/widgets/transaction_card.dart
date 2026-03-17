@@ -73,7 +73,7 @@ class TransactionCard extends StatelessWidget {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () {
-                      debugPrint('Open Command Center for ${trade.id}');
+                      debugPrint('Open Trade Center for ${trade.id}');
                     },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: red,
@@ -82,7 +82,7 @@ class TransactionCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: const Text('Open Command Center'),
+                    child: const Text('Trade Center'),
                   ),
                 ),
                 const SizedBox(width: 12),
