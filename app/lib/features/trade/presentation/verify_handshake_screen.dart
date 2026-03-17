@@ -115,58 +115,81 @@ class _StepIndicator extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: List.generate(steps.length, (index) {
-          final stepNum = index + 2; // Steps 2, 3, 4
+          final stepNum = index + 1;
           final isCompleted = currentStep.index > index;
           final isCurrent = currentStep.index == index;
+          final previousSegmentCompleted = currentStep.index > index - 1;
+          final nextSegmentCompleted = currentStep.index > index;
 
           return Expanded(
             child: Column(
               children: [
-                Row(
-                  children: [
-                    // Step circle
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isCompleted
-                            ? Colors.green
-                            : isCurrent
-                            ? const Color(0xFF8B0000)
-                            : Colors.grey[300],
-                      ),
-                      child: Center(
-                        child: isCompleted
-                            ? const Icon(
-                                Icons.check,
-                                color: Colors.white,
-                                size: 20,
-                              )
-                            : Text(
-                                stepNum.toString(),
-                                style: TextStyle(
-                                  color: isCurrent
-                                      ? Colors.white
-                                      : Colors.grey[600],
-                                  fontWeight: FontWeight.bold,
+                SizedBox(
+                  height: 40,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      if (index > 0)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: FractionallySizedBox(
+                            widthFactor: 0.5,
+                            child: Container(
+                              height: 2,
+                              color: previousSegmentCompleted
+                                  ? Colors.green
+                                  : Colors.grey[300],
+                            ),
+                          ),
+                        ),
+                      if (index < steps.length - 1)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: FractionallySizedBox(
+                            widthFactor: 0.5,
+                            child: Container(
+                              height: 2,
+                              color: nextSegmentCompleted
+                                  ? Colors.green
+                                  : Colors.grey[300],
+                            ),
+                          ),
+                        ),
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isCompleted
+                              ? Colors.green
+                              : isCurrent
+                              ? const Color(0xFF8B0000)
+                              : Colors.grey[300],
+                        ),
+                        child: Center(
+                          child: isCompleted
+                              ? const Icon(
+                                  Icons.check,
+                                  color: Colors.white,
+                                  size: 20,
+                                )
+                              : Text(
+                                  stepNum.toString(),
+                                  style: TextStyle(
+                                    color: isCurrent
+                                        ? Colors.white
+                                        : Colors.grey[600],
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
-                              ),
-                      ),
-                    ),
-                    if (index < steps.length - 1)
-                      Expanded(
-                        child: Container(
-                          height: 2,
-                          color: isCompleted ? Colors.green : Colors.grey[300],
-                          margin: const EdgeInsets.symmetric(horizontal: 8),
                         ),
                       ),
-                  ],
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 8),
-                SizedBox(
-                  width: 50,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Text(
                     steps[index].$1,
                     style: theme.textTheme.labelSmall?.copyWith(
