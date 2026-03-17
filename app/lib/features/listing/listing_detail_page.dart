@@ -216,12 +216,7 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                       onPressed: _canSubmitOffer
                           ? () {
                               Navigator.of(context).pop();
-                              // temp demo link: jump straight to command center
-                              // while trades list page is still placeholder-only.
-                              final String demoTradeId = _offerType == 'trade'
-                                  ? 'trade-1'
-                                  : 'trade-2';
-                              this.context.go('/command/$demoTradeId');
+                              this.context.go('/trades');
                             }
                           : null,
                       style: FilledButton.styleFrom(
