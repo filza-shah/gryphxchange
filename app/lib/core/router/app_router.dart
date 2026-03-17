@@ -9,6 +9,8 @@ import '../providers/auth_provider.dart';
 import '../providers/workflow_provider.dart';
 import '../widgets/app_bottom_nav.dart';
 import '../../features/trade/presentation/trade_screen.dart';
+import '../../features/trade/presentation/verify_handshake_screen.dart';
+import '../../features/trade/models/display_trade.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -43,6 +45,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/trades',
         builder: (context, state) => const TradeScreen(),
+      ),
+      GoRoute(
+        path: '/verify-handshake/:tradeId',
+        builder: (context, state) {
+          final trade = state.extra as DisplayTrade;
+          return VerifyHandshakeScreen(trade: trade);
+        },
       ),
       GoRoute(
         path: '/profile',
