@@ -15,6 +15,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
+  final TextEditingController _tradeForController = TextEditingController();
   final TextEditingController _courseCodeController = TextEditingController();
   final TextEditingController _authorController = TextEditingController();
   final TextEditingController _editionController = TextEditingController();
@@ -137,6 +138,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
     _titleController.dispose();
     _descriptionController.dispose();
     _priceController.dispose();
+    _tradeForController.dispose();
     _courseCodeController.dispose();
     _authorController.dispose();
     _editionController.dispose();
@@ -441,6 +443,16 @@ class _CreateListingPageState extends State<CreateListingPage> {
                   const Chip(
                     label: Text('Open to trade offers'),
                     backgroundColor: Color(0x33FFD700),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _tradeForController,
+                    decoration: const InputDecoration(
+                      labelText: 'What do you want in return?',
+                      hintText: 'e.g., Physics textbook, CIS notes...',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.swap_horiz),
+                    ),
                   ),
                 ],
                 const SizedBox(height: 20),

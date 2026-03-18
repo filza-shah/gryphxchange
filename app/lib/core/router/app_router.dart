@@ -13,6 +13,7 @@ import '../widgets/app_bottom_nav.dart';
 import '../../features/trade/presentation/trade_screen.dart';
 import '../../features/trade/presentation/verify_handshake_screen.dart';
 import '../../features/trade/models/display_trade.dart';
+import '../../features/profile/profile_page.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -63,30 +64,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/profile',
-        builder: (context, state) =>
-            const _PlaceholderPage(title: 'Profile', route: '/profile'),
+        builder: (context, state) => ProfilePage(
+          workflowController: ref.read(workflowControllerProvider),
+        ),
       ),
     ],
   );
 });
 
-class _PlaceholderPage extends StatelessWidget {
-  const _PlaceholderPage({required this.title, required this.route});
-
-  final String title;
-  final String route;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      bottomNavigationBar: AppBottomNav(currentRoute: route),
-      body: Center(
-        child: Text(
-          '$title page is not ported yet.',
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-      ),
-    );
-  }
-}

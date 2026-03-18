@@ -18,15 +18,15 @@ class ListingCard extends StatelessWidget {
         // navigate to listing detail page on tap
         onTap: () => context.push('/listing/${listing.id}'),
         borderRadius: BorderRadius.circular(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: <Widget>[
-            // left side - fixed size image
-            if (listing.images.isNotEmpty)
-              ClipRRect(
-                borderRadius: const BorderRadius.horizontal(
-                  left: Radius.circular(12),
-                ),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              // left side - fixed size image
+              if (listing.images.isNotEmpty)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
                 child: Image.network(
                   listing.images.first,
                   width: 90,
@@ -54,9 +54,9 @@ class ListingCard extends StatelessWidget {
                 ),
               ),
             // right side - listing details
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(10),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -88,25 +88,32 @@ class ListingCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 6),
-                    // price or trade badge - using Container instead of Chip
-                    // to avoid Chip's forced minimum height causing overflow
                     listing.isTrade
-                        ? Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFD700),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              'Trade',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              const Icon(
+                                Icons.swap_horiz,
+                                size: 14,
+                                color: Color(0xFF8B0000),
                               ),
-                            ),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  listing.tradeFor != null &&
+                                          listing.tradeFor!.isNotEmpty
+                                      ? 'Wants: ${listing.tradeFor}'
+                                      : 'Trade',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF8B0000),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           )
                         : Text(
                             '\$${listing.price?.toStringAsFixed(0) ?? ''}',
@@ -120,10 +127,10 @@ class ListingCard extends StatelessWidget {
                 ),
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
-
