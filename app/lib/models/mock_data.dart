@@ -23,6 +23,7 @@ class Listing {
     required this.description,
     required this.price,
     required this.isTrade,
+    this.tradeFor,
     required this.courseCode,
     required this.semester,
     required this.images,
@@ -37,6 +38,8 @@ class Listing {
   final String description;
   final double? price;
   final bool isTrade;
+  // What the seller wants in return for a trade listing (optional free-text).
+  final String? tradeFor;
   final String courseCode;
   final String semester;
   final List<String> images;
@@ -154,6 +157,7 @@ final List<Listing> mockListings = <Listing>[
         'Perfect working condition. Batteries included. Great for MATH courses.',
     price: null,
     isTrade: true,
+    tradeFor: 'Physics or Stats textbook',
     courseCode: 'MATH*1200',
     semester: 'Fall 2025',
     images: <String>[
@@ -188,6 +192,7 @@ final List<Listing> mockListings = <Listing>[
         'Complete lecture notes and study guides for CIS*4030. Helped me get an A+!',
     price: 25,
     isTrade: true,
+    tradeFor: 'Any CIS or ENGG notes/textbook',
     courseCode: 'CIS*4030',
     semester: 'Fall 2025',
     images: <String>[
