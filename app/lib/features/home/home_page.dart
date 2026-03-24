@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/widgets/app_bottom_nav.dart';
 import '../../core/widgets/app_header.dart';
 import '../../core/widgets/search_bar.dart';
+import '../../core/providers/listings_provider.dart';
 import '../../models/mock_data.dart';
 import '../../core/widgets/listing_card.dart';
 
@@ -24,13 +25,10 @@ class _HomePageState extends ConsumerState<HomePage> {
     super.dispose();
   }
 
-  //filters listings based on search 
-  List<Listing> get _filteredListings {
-    //if search is emtpy just return all mock listings 
-    if (_searchQuery.isEmpty) return mockListings;
+  List<Listing> _filteredListings(List<Listing> listings) {
+    if (_searchQuery.isEmpty) return listings;
     final String query = _searchQuery.toLowerCase();
-    // Filter listings by title course code or category
-    return mockListings.where((Listing listing) {
+    return listings.where((Listing listing) {
       return listing.title.toLowerCase().contains(query) ||
           listing.courseCode.toLowerCase().contains(query) ||
           listing.category.toLowerCase().contains(query);
@@ -39,6 +37,8 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final listingsAsync = ref.watch(listingsStreamProvider);
+
     return Scaffold(
       bottomNavigationBar: const AppBottomNav(currentRoute: '/home'),
       body: Column(
@@ -50,14 +50,44 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
           //expanded widget to fill space with the listings
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              itemCount: _filteredListings.length,
-              itemBuilder: (BuildContext context, int index) {
-                //display each listing usign the listingCard widget
-                return ListingCard(listing: _filteredListings[index]);
-              }
-            )
+            child: listingsAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, stackTrace) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    'Unable to load listings right now. Please try again.',
+                    style: TextStyle(color: Colors.grey.shade700),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+              data: (listings) {
+                final filteredListings = _filteredListings(listings);
+
+                if (filteredListings.isEmpty) {
+                  return Center(
+                    child: Text(
+                      _searchQuery.isEmpty
+                          ? 'No listings found.'
+                          : 'No listings match your search.',
+                      style: TextStyle(color: Colors.grey.shade700),
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  itemCount: filteredListings.length,
+                  itemBuilder: (BuildContext context, int index) {
+                    return ListingCard(listing: filteredListings[index]);
+                  },
+                );
+              },
+            ),
           ),
         ],
       ),
