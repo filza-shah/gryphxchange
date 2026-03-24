@@ -17,7 +17,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/login',
     redirect: (context, state) {
-      final isLoggedIn = ref.read(authProvider);
+      final isLoggedIn = ref.watch(authStateProvider).asData?.value != null;
       final onLogin = state.matchedLocation == '/login';
 
       if (!isLoggedIn && !onLogin) return '/login';

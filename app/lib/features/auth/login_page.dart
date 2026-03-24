@@ -53,8 +53,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       return;
     }
 
-    // Mark the user as logged in in Riverpod state
-    ref.read(authProvider.notifier).state = true;
+    ref.read(authServiceProvider).signIn(email: email, password: password).then((_) {
+      // Authentication successful, auth state will update and trigger router redirect
+    }).catchError((error) {
+      setState(() {
+        _error = 'Login failed. Please check your credentials and try again.';
+      });
+    });
 
     // Move to home. Router redirect rules also use authProvider so app-level guards stay consistent
     if (mounted) {

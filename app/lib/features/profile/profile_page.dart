@@ -334,8 +334,8 @@ class ProfilePage extends ConsumerWidget {
                       ),
                       title: const Text('Logout'),
                       onTap: () {
-                        // Clear auth flag; router guard then keeps user on /login.
-                        ref.read(authProvider.notifier).state = false;
+                        // sign out the user and return to login page. Router redirect rules will also prevent access to protected routes after logout
+                        ref.read(authServiceProvider).signOut();
                         context.go('/login');
                       },
                     ),
