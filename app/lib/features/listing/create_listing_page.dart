@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -13,6 +14,9 @@ class CreateListingPage extends StatefulWidget {
 }
 
 class _CreateListingPageState extends State<CreateListingPage> {
+  static final FilteringTextInputFormatter _priceInputFormatter =
+  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}$'));
+
   // form controllers: all core listing inputs live here for now.
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
@@ -138,6 +142,34 @@ class _CreateListingPageState extends State<CreateListingPage> {
     }
 
     return _tradeForController.text.trim().isEmpty;
+  }
+
+  List<String> get _missingRequiredFields {
+    final List<String> missing = <String>[];
+
+    if (_titleController.text.trim().isEmpty) {
+      missing.add('Title');
+    }
+    if (_descriptionController.text.trim().isEmpty) {
+      missing.add('Description');
+    }
+    if (_courseCodeController.text.trim().isEmpty) {
+      missing.add('Course Code');
+    }
+    if ((_semester ?? '').isEmpty) {
+      missing.add('Semester');
+    }
+
+    if (_offerType == 'cash') {
+      final double? parsedPrice = double.tryParse(_priceController.text.trim());
+      if (parsedPrice == null || parsedPrice <= 0) {
+        missing.add('Valid Price');
+      }
+    } else if (_tradeForController.text.trim().isEmpty) {
+      missing.add('Trade Preference');
+    }
+
+    return missing;
   }
 
   Future<void> _handleSubmit() async {
@@ -419,11 +451,29 @@ class _CreateListingPageState extends State<CreateListingPage> {
                 ),
                 const SizedBox(height: 14),
                 // main listing form fields start here.
+                Row(
+                  children: <Widget>[
+                    Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: Colors.grey.shade700,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '* Required fields',
+                      style: TextStyle(
+                        color: Colors.grey.shade700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
                 TextField(
                   controller: _titleController,
                   onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
-                    labelText: 'Title',
+                    labelText: 'Title *',
                     hintText: 'e.g., Data Structures Textbook',
                     border: OutlineInputBorder(),
                   ),
@@ -452,7 +502,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
                   onChanged: (_) => setState(() {}),
                   maxLines: 4,
                   decoration: const InputDecoration(
-                    labelText: 'Description',
+                    labelText: 'Description *',
                     hintText: 'Describe the condition and details',
                     border: OutlineInputBorder(),
                   ),
@@ -462,7 +512,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
                   controller: _courseCodeController,
                   onChanged: (_) => setState(() {}),
                   decoration: const InputDecoration(
-                    labelText: 'Course Code',
+                    labelText: 'Course Code *',
                     hintText: 'e.g., CIS*2520',
                     border: OutlineInputBorder(),
                   ),
@@ -471,7 +521,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
                 DropdownButtonFormField<String>(
                   initialValue: _semester,
                   decoration: const InputDecoration(
-                    labelText: 'Semester',
+                    labelText: 'Semester *',
                     border: OutlineInputBorder(),
                   ),
                   items: const <DropdownMenuItem<String>>[
@@ -529,9 +579,13 @@ class _CreateListingPageState extends State<CreateListingPage> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: _priceController,
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: <TextInputFormatter>[_priceInputFormatter],
+                    onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
-                      labelText: 'Price (CAD)',
+                      labelText: 'Price (CAD) *',
                       prefixText: '\$',
                       hintText: '0.00',
                       border: OutlineInputBorder(),
@@ -547,8 +601,9 @@ class _CreateListingPageState extends State<CreateListingPage> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: _tradeForController,
+                    onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
-                      labelText: 'What do you want in return?',
+                      labelText: 'What do you want in return? *',
                       hintText: 'e.g., Physics textbook, CIS notes...',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.swap_horiz),
@@ -556,6 +611,22 @@ class _CreateListingPageState extends State<CreateListingPage> {
                   ),
                 ],
                 const SizedBox(height: 20),
+                if (_missingRequiredFields.isNotEmpty) ...<Widget>[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF8E1),
+                      border: Border.all(color: const Color(0xFFFFECB3)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Please complete: ${_missingRequiredFields.join(', ')}',
+                      style: const TextStyle(color: Color(0xFF6D4C41)),
+                    ),
+                  ),
+                ],
                 if (_submitError.isNotEmpty) ...<Widget>[
                   Container(
                     width: double.infinity,

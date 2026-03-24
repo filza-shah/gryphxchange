@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../models/mock_data.dart';
 
 class OfferDialog extends StatefulWidget {
@@ -36,6 +37,9 @@ class OfferDialog extends StatefulWidget {
 }
 
 class _OfferDialogState extends State<OfferDialog> {
+  static final FilteringTextInputFormatter _currencyInputFormatter =
+      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}$'));
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -74,7 +78,10 @@ class _OfferDialogState extends State<OfferDialog> {
             if (widget.offerType == 'cash')
               TextField(
                 controller: widget.cashAmountController,
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: <TextInputFormatter>[_currencyInputFormatter],
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
                   labelText: 'Your Offer (CAD)',
@@ -112,7 +119,10 @@ class _OfferDialogState extends State<OfferDialog> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: widget.cashTopUpController,
-                    keyboardType: TextInputType.number,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: <TextInputFormatter>[_currencyInputFormatter],
                     onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
                       labelText: 'Cash Top-up (Optional)',
