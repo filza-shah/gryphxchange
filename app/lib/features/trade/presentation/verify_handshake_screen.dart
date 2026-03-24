@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/providers/workflow_provider.dart';
 import '../models/display_trade.dart';
@@ -14,6 +15,85 @@ class VerifyHandshakeScreen extends ConsumerWidget {
   final DisplayTrade trade;
 
   const VerifyHandshakeScreen({super.key, required this.trade});
+
+  Future<void> _persistCompletionAndRating(VerificationState state) async {
+    final FirebaseFirestore firestore = FirebaseFirestore.instance;
+    final DocumentReference<Map<String, dynamic>> offerRef =
+        firestore.collection('offers').doc(trade.id);
+    final DocumentReference<Map<String, dynamic>> listingRef =
+        firestore.collection('listings').doc(trade.listingId);
+    final User? currentUser = FirebaseAuth.instance.currentUser;
+
+    // This helps to update related data such as number of transactions and ratings to a user's profile after a transaction is completed.
+    await firestore.runTransaction((transaction) async {
+      final offerSnapshot = await transaction.get(offerRef);
+      final Map<String, dynamic> offer =
+          offerSnapshot.data() ?? <String, dynamic>{};
+
+      final String sellerId = (offer['sellerId'] as String?) ?? '';
+      final String buyerId = (offer['buyerId'] as String?) ?? '';
+      final String currentUserId = currentUser?.uid ?? '';
+
+      final String ratedUserId =
+          currentUserId.isNotEmpty && currentUserId == sellerId
+          ? buyerId
+          : sellerId;
+
+      transaction.set(offerRef, <String, dynamic>{
+        'status': 'completed',
+        'completedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      transaction.set(listingRef, <String, dynamic>{
+        'status': 'completed',
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (ratedUserId.isNotEmpty && state.rating != null) {
+        final ratedUserRef = firestore.collection('users').doc(ratedUserId);
+        final ratedUserSnapshot = await transaction.get(ratedUserRef);
+        final Map<String, dynamic> ratedUser =
+            ratedUserSnapshot.data() ?? <String, dynamic>{};
+
+        final int oldTotalRatings =
+            (ratedUser['totalRatings'] as num?)?.toInt() ?? 0;
+        final double oldRating = (ratedUser['rating'] as num?)?.toDouble() ?? 0;
+        final int newTotalRatings = oldTotalRatings + 1;
+        final double newAverageRating =
+            ((oldRating * oldTotalRatings) + state.rating!) / newTotalRatings;
+
+        transaction.set(ratedUserRef, <String, dynamic>{
+          'rating': newAverageRating,
+          'totalRatings': newTotalRatings,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+
+      if (sellerId.isNotEmpty) {
+        final sellerRef = firestore.collection('users').doc(sellerId);
+        final sellerSnapshot = await transaction.get(sellerRef);
+        final int sellerCompleted =
+            (sellerSnapshot.data()?['completedTrades'] as num?)?.toInt() ?? 0;
+
+        transaction.set(sellerRef, <String, dynamic>{
+          'completedTrades': sellerCompleted + 1,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+
+      if (buyerId.isNotEmpty) {
+        final buyerRef = firestore.collection('users').doc(buyerId);
+        final buyerSnapshot = await transaction.get(buyerRef);
+        final int buyerCompleted =
+            (buyerSnapshot.data()?['completedTrades'] as num?)?.toInt() ?? 0;
+
+        transaction.set(buyerRef, <String, dynamic>{
+          'completedTrades': buyerCompleted + 1,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -93,21 +173,7 @@ class VerifyHandshakeScreen extends ConsumerWidget {
           transactionId: state.transactionId,
           onRated: notifier.recordRating,
           onComplete: () async {
-            await FirebaseFirestore.instance
-                .collection('offers')
-                .doc(trade.id)
-                .set(<String, dynamic>{
-              'status': 'completed',
-              'completedAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
-
-            await FirebaseFirestore.instance
-                .collection('listings')
-                .doc(trade.listingId)
-                .set(<String, dynamic>{
-              'status': 'completed',
-              'updatedAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
+            await _persistCompletionAndRating(state);
 
             final workflowController = ref.read(workflowControllerProvider);
             workflowController.completeTransaction(
