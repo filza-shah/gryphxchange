@@ -303,7 +303,7 @@ class ProfilePage extends ConsumerWidget {
                               child: Column(
                                 children: <Widget>[
                                   Text(
-                                    "You haven't posted any listings yet",
+                                    "You don't have any active listings",
                                     style: TextStyle(color: Colors.grey.shade700),
                                   ),
                                   const SizedBox(height: 12),
@@ -314,7 +314,7 @@ class ProfilePage extends ConsumerWidget {
                                     style: FilledButton.styleFrom(
                                       backgroundColor: const Color(0xFF8B0000),
                                     ),
-                                    child: const Text('Create Your First Listing'),
+                                    child: const Text('Create a Listing'),
                                   ),
                                 ],
                               ),
