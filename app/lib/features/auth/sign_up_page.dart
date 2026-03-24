@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/providers/auth_provider.dart';
 
 /// Sign-up screen for new students
@@ -56,14 +57,27 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
     });
 
     try {
-      ref.read(authServiceProvider).signUp(email: email, password: password).then((_) {
-        // Sign-up successful, auth state will update and trigger router redirect
-      }).catchError((error) {
-        setState(() {
-          _error = 'Sign up failed. This email may already be in use.';
-          _isLoading = false;
-        });
-      });
+      final userCredential = await ref
+          .read(authServiceProvider)
+          .signUp(email: email, password: password);
+
+      final user = userCredential.user;
+      if (user != null) {
+        final String fallbackName =
+            email.split('@').first.replaceAll('.', ' ').trim();
+
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'name': fallbackName,
+          'email': email,
+          'avatar': user.photoURL,
+          'rating': 0,
+          'totalRatings': 0,
+          'completedTrades': 0,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+
       // Auth state stream updates automatically, router will redirect to /home
     } catch (e) {
       if (mounted) {
