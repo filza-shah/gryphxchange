@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/widgets/star_rating.dart';
 import '../../models/mock_data.dart';
+import '../../models/listing_firestore_mapper.dart';
 import 'widgets/offer_dialog.dart';
 
 class ListingDetailPage extends StatefulWidget {
@@ -95,53 +97,77 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    // quick lookup from mock data until real backend wiring lands.
-    final Listing? listing = mockListings
-        .where((Listing item) => item.id == widget.listingId)
-        .firstOrNull;
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('listings')
+          .doc(widget.listingId)
+          .snapshots(),
+      builder: (BuildContext context,
+          AsyncSnapshot<DocumentSnapshot<Map<String, dynamic>>> snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
 
-    if (listing == null) {
-      return const Scaffold(body: Center(child: Text('Listing not found')));
-    }
+        if (snapshot.hasError) {
+          return const Scaffold(
+            body: Center(child: Text('Unable to load listing right now.')),
+          );
+        }
 
-    return Scaffold(
-      body: Column(
-        children: <Widget>[
-          Container(
-            color: const Color(0xFF8B0000),
-            padding: const EdgeInsets.only(
-              top: 12,
-              bottom: 12,
-              left: 8,
-              right: 8,
-            ),
-            child: SafeArea(
-              bottom: false,
-              child: Row(
-                children: <Widget>[
-                  IconButton(
-                    onPressed: () => context.go('/home'),
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+        final DocumentSnapshot<Map<String, dynamic>>? document = snapshot.data;
+        if (document == null || !document.exists) {
+          return const Scaffold(body: Center(child: Text('Listing not found')));
+        }
+
+        final Listing listing = listingFromFirestoreMap(
+          id: document.id,
+          data: document.data() ?? <String, dynamic>{},
+        );
+
+        return Scaffold(
+          body: Column(
+            children: <Widget>[
+              Container(
+                color: const Color(0xFF8B0000),
+                padding: const EdgeInsets.only(
+                  top: 12,
+                  bottom: 12,
+                  left: 8,
+                  right: 8,
+                ),
+                child: SafeArea(
+                  bottom: false,
+                  child: Row(
+                    children: <Widget>[
+                      IconButton(
+                        onPressed: () => context.go('/home'),
+                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      ),
+                      const Text(
+                        'Listing Details',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 20,
+                        ),
+                      ),
+                    ],
                   ),
-                  const Text(
-                    'Listing Details',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 20,
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              children: <Widget>[
+              Expanded(
+                child: ListView(
+                  children: <Widget>[
                 SizedBox(
                   height: 300,
                   child: PageView(
-                    children: listing.images
+                    children: (listing.images.isNotEmpty
+                            ? listing.images
+                            : <String>[
+                                'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=400'
+                              ])
                         .map(
                           (String image) => Image.network(
                             image,
@@ -309,8 +335,8 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton(
-                          onPressed: (){
-                             _openOfferDialog(listing);
+                          onPressed: () {
+                            _openOfferDialog(listing);
                           },
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFF8B0000),
@@ -322,11 +348,13 @@ class _ListingDetailPageState extends State<ListingDetailPage> {
                     ],
                   ),
                 ),
-              ],
-            ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

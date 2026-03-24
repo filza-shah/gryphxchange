@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../core/widgets/app_bottom_nav.dart';
 
@@ -28,7 +30,9 @@ class _CreateListingPageState extends State<CreateListingPage> {
   final List<String> _images = <String>[];
   // scan status text + counters (just UI feedback stuff).
   bool _scanLoading = false;
+  bool _isSubmitting = false;
   String _scanError = '';
+  String _submitError = '';
   int _bookMatchesFound = 0;
 
   // quick local ISBN lookup so this flow works even if net is down.
@@ -118,19 +122,115 @@ class _CreateListingPageState extends State<CreateListingPage> {
 
   bool get _isSubmitDisabled {
     // simple guardrails so we don't submit half-empty mock listings.
-    return _titleController.text.trim().isEmpty ||
+    final bool baseInvalid =
+        _titleController.text.trim().isEmpty ||
         _descriptionController.text.trim().isEmpty ||
         _courseCodeController.text.trim().isEmpty ||
         (_semester ?? '').isEmpty;
+
+    if (baseInvalid || _isSubmitting) {
+      return true;
+    }
+
+    if (_offerType == 'cash') {
+      final double? parsedPrice = double.tryParse(_priceController.text.trim());
+      return parsedPrice == null || parsedPrice <= 0;
+    }
+
+    return _tradeForController.text.trim().isEmpty;
   }
 
-  void _handleSubmit() {
+  Future<void> _handleSubmit() async {
     if (_isSubmitDisabled) {
       return;
     }
 
-    // this is still mock-only; we route back home after "submit".
-    context.go('/home');
+    final User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      setState(() {
+        _submitError = 'You must be signed in to create a listing.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _submitError = '';
+    });
+
+    final String email = user.email ?? 'unknown@uoguelph.ca';
+    final String fallbackName = email.split('@').first;
+    final String sellerName = (user.displayName != null && user.displayName!.trim().isNotEmpty)
+        ? user.displayName!.trim()
+        : fallbackName;
+
+    final bool isTrade = _offerType == 'trade';
+    final double? parsedPrice = double.tryParse(_priceController.text.trim());
+
+    final Map<String, dynamic> listingPayload = <String, dynamic>{
+      'title': _titleController.text.trim(),
+      'description': _descriptionController.text.trim(),
+      'courseCode': _courseCodeController.text.trim().toUpperCase(),
+      'semester': _semester,
+      'category': 'Textbooks',
+      'isTrade': isTrade,
+      'price': isTrade ? null : parsedPrice,
+      'tradeFor': isTrade ? _tradeForController.text.trim() : null,
+      'images': List<String>.from(_images),
+      'status': 'active',
+      'author': _authorController.text.trim(),
+      'edition': _editionController.text.trim(),
+      'isbn': _isbnController.text.trim().replaceAll('-', ''),
+      'sellerId': user.uid,
+      'userId': user.uid,
+      'seller': <String, dynamic>{
+        'id': user.uid,
+        'name': sellerName,
+        'email': email,
+        'avatar': user.photoURL,
+        'rating': 0,
+        'totalRatings': 0,
+      },
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'name': sellerName,
+        'email': email,
+        'avatar': user.photoURL,
+        'rating': 0,
+        'totalRatings': 0,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      await FirebaseFirestore.instance.collection('listings').add(listingPayload);
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Listing created successfully.')),
+      );
+      context.go('/home');
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _submitError = 'Unable to create listing right now. Please try again.';
+        _isSubmitting = false;
+      });
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isSubmitting = false;
+      });
+    }
   }
 
   @override
@@ -456,13 +556,38 @@ class _CreateListingPageState extends State<CreateListingPage> {
                   ),
                 ],
                 const SizedBox(height: 20),
+                if (_submitError.isNotEmpty) ...<Widget>[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFEBEE),
+                      border: Border.all(color: const Color(0xFFFFCDD2)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      _submitError,
+                      style: const TextStyle(color: Color(0xFFB71C1C)),
+                    ),
+                  ),
+                ],
                 FilledButton(
                   onPressed: _isSubmitDisabled ? null : _handleSubmit,
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF8B0000),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  child: const Text('Submit Listing'),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Submit Listing'),
                 ),
               ],
             ),
