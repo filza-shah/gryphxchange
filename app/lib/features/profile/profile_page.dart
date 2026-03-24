@@ -10,10 +10,9 @@ import '../../core/widgets/star_rating.dart';
 import '../../models/mock_data.dart';
 import '../../models/listing_firestore_mapper.dart';
 import '../../services/workflow/workflow_controller.dart';
-import '../../services/workflow/workflow_state.dart';
 
 final profileUserProvider = StreamProvider<Map<String, dynamic>>((ref) {
-  final User? authUser = FirebaseAuth.instance.currentUser;
+  final User? authUser = ref.watch(authStateProvider).asData?.value;
   if (authUser == null) {
     return Stream.value(<String, dynamic>{
       'name': 'Guest',
@@ -21,6 +20,7 @@ final profileUserProvider = StreamProvider<Map<String, dynamic>>((ref) {
       'rating': 0.0,
       'totalRatings': 0,
       'completedTrades': 0,
+      'trustScore': 0,
     });
   }
 
@@ -41,12 +41,13 @@ final profileUserProvider = StreamProvider<Map<String, dynamic>>((ref) {
           'rating': (data['rating'] as num?)?.toDouble() ?? 0.0,
           'totalRatings': (data['totalRatings'] as num?)?.toInt() ?? 0,
           'completedTrades': (data['completedTrades'] as num?)?.toInt() ?? 0,
+          'trustScore': (data['trustScore'] as num?)?.toInt() ?? 0,
         };
       });
 });
 
 final myListingsProvider = StreamProvider<List<Listing>>((ref) {
-  final User? authUser = FirebaseAuth.instance.currentUser;
+  final User? authUser = ref.watch(authStateProvider).asData?.value;
   if (authUser == null) {
     return Stream.value(const <Listing>[]);
   }
@@ -73,7 +74,7 @@ final myListingsProvider = StreamProvider<List<Listing>>((ref) {
 });
 
 final myCompletedListingsProvider = StreamProvider<List<Listing>>((ref) {
-  final User? authUser = FirebaseAuth.instance.currentUser;
+  final User? authUser = ref.watch(authStateProvider).asData?.value;
   if (authUser == null) {
     return Stream.value(const <Listing>[]);
   }
@@ -112,8 +113,6 @@ class ProfilePage extends ConsumerWidget {
     return AnimatedBuilder(
       animation: workflowController,
       builder: (BuildContext context, Widget? child) {
-        // Latest persisted workflow state (trust score, hidden/completed listings, etc)
-        final WorkflowState workflowState = workflowController.state;
         final profileUserAsync = ref.watch(profileUserProvider);
         final userListingsAsync = ref.watch(myListingsProvider);
         final completedListingsAsync = ref.watch(myCompletedListingsProvider);
@@ -196,7 +195,7 @@ class ProfilePage extends ConsumerWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Trust Score: ${workflowState.trustScore}',
+                        'Trust Score: ${(profileUser['trustScore'] as num?)?.toInt() ?? 0}',
                         style: const TextStyle(color: Colors.white),
                       ),
                     ],
@@ -462,10 +461,13 @@ class ProfilePage extends ConsumerWidget {
                         color: Color(0xFF8B0000),
                       ),
                       title: const Text('Logout'),
-                      onTap: () {
+                      onTap: () async {
                         // sign out the user and return to login page. Router redirect rules will also prevent access to protected routes after logout
-                        ref.read(authServiceProvider).signOut();
-                        context.go('/login');
+                        await ref.read(authServiceProvider).signOut();
+                        workflowController.resetWorkflowState();
+                        if (context.mounted) {
+                          context.go('/login');
+                        }
                       },
                     ),
                   ],
