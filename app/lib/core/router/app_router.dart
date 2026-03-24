@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/command/command_center_page.dart';
 import '../../features/auth/login_page.dart';
+import '../../features/auth/sign_up_page.dart';
 import '../../features/home/home_page.dart';
 import '../../features/listing/create_listing_page.dart';
 import '../../features/listing/listing_detail_page.dart';
@@ -18,14 +19,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: '/login',
     redirect: (context, state) {
       final isLoggedIn = ref.watch(authStateProvider).asData?.value != null;
-      final onLogin = state.matchedLocation == '/login';
+      final onAuthPage = state.matchedLocation == '/login' ||
+          state.matchedLocation == '/signup';
 
-      if (!isLoggedIn && !onLogin) return '/login';
-      if (isLoggedIn && onLogin) return '/home';
+      if (!isLoggedIn && !onAuthPage) return '/login';
+      if (isLoggedIn && onAuthPage) return '/home';
       return null;
     },
     routes: [
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+      GoRoute(path: '/signup', builder: (context, state) => const SignUpPage()),
       GoRoute(path: '/home', builder: (context, state) => const HomePage()),
       GoRoute(
         path: '/wishlist',
