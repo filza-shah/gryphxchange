@@ -7,6 +7,7 @@ class OfferDialog extends StatefulWidget {
     required this.offerType,
     required this.cashAmountController,
     required this.cashTopUpController,
+    required this.messageController,
     required this.meetupDateController,
     required this.selectedTradeItem,
     required this.meetupLocation,
@@ -20,13 +21,14 @@ class OfferDialog extends StatefulWidget {
   final String offerType;
   final TextEditingController cashAmountController;
   final TextEditingController cashTopUpController;
+  final TextEditingController messageController;
   final TextEditingController meetupDateController;
   final String selectedTradeItem;
   final String meetupLocation;
   final ValueChanged<String?> onTradeItemChanged;
   final ValueChanged<String?> onMeetupLocationChanged;
   final Future<void> Function() onPickDateTime;
-  final bool canSubmitOffer;
+  final bool Function() canSubmitOffer;
   final VoidCallback onSubmitOffer;
 
   @override
@@ -73,6 +75,7 @@ class _OfferDialogState extends State<OfferDialog> {
               TextField(
                 controller: widget.cashAmountController,
                 keyboardType: TextInputType.number,
+                onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
                   labelText: 'Your Offer (CAD)',
                   prefixText: '\$',
@@ -110,6 +113,7 @@ class _OfferDialogState extends State<OfferDialog> {
                   TextField(
                     controller: widget.cashTopUpController,
                     keyboardType: TextInputType.number,
+                    onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
                       labelText: 'Cash Top-up (Optional)',
                       prefixText: '\$',
@@ -119,6 +123,17 @@ class _OfferDialogState extends State<OfferDialog> {
                 ],
               ),
             const SizedBox(height: 16),
+            TextField(
+              controller: widget.messageController,
+              maxLines: 3,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Message to Seller (optional)',
+                hintText: 'Add details about your offer',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
             const Text(
               'Proposed Meetup',
               style: TextStyle(fontWeight: FontWeight.w600),
@@ -127,7 +142,12 @@ class _OfferDialogState extends State<OfferDialog> {
             TextField(
               controller: widget.meetupDateController,
               readOnly: true,
-              onTap: widget.onPickDateTime,
+              onTap: () async {
+                await widget.onPickDateTime();
+                if (mounted) {
+                  setState(() {});
+                }
+              },
               decoration: const InputDecoration(
                 labelText: 'Date & Time',
                 border: OutlineInputBorder(),
@@ -152,7 +172,10 @@ class _OfferDialogState extends State<OfferDialog> {
                     ),
                   )
                   .toList(growable: false),
-              onChanged: widget.onMeetupLocationChanged,
+              onChanged: (String? value) {
+                widget.onMeetupLocationChanged(value);
+                setState(() {});
+              },
             ),
           ],
         ),
@@ -164,7 +187,7 @@ class _OfferDialogState extends State<OfferDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: widget.canSubmitOffer ? widget.onSubmitOffer : null,
+          onPressed: widget.canSubmitOffer() ? widget.onSubmitOffer : null,
           style: FilledButton.styleFrom(
             backgroundColor: const Color(0xFF8B0000),
           ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/providers/workflow_provider.dart';
 import '../models/display_trade.dart';
@@ -91,7 +92,23 @@ class VerifyHandshakeScreen extends ConsumerWidget {
         return RateCompleteStep(
           transactionId: state.transactionId,
           onRated: notifier.recordRating,
-          onComplete: () {
+          onComplete: () async {
+            await FirebaseFirestore.instance
+                .collection('offers')
+                .doc(trade.id)
+                .set(<String, dynamic>{
+              'status': 'completed',
+              'completedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+
+            await FirebaseFirestore.instance
+                .collection('listings')
+                .doc(trade.listingId)
+                .set(<String, dynamic>{
+              'status': 'completed',
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+
             final workflowController = ref.read(workflowControllerProvider);
             workflowController.completeTransaction(
               trade.id,
