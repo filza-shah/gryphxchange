@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 // Reusable header widget for the app, displaying a title and optional actions.
 class AppHeader extends StatelessWidget {

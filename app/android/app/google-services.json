@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "335214325709",
+    "project_id": "gryphxchange",
+    "storage_bucket": "gryphxchange.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:335214325709:android:82b69e2945b435fdec9e84",
+        "android_client_info": {
+          "package_name": "com.example.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBmLXjshuKxq3xc8YTc_IM_cHPDnq1slEc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

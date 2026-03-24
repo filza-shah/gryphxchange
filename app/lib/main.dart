@@ -5,6 +5,10 @@ import 'core/providers/workflow_provider.dart';
 import 'core/router/app_router.dart';
 import 'services/workflow/workflow_controller.dart';
 
+// Firebase imports
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+
 // custom color constants for app theme
 const Color _gryphRed = Color(0xFF8B0000);
 const Color _gryphGold = Color(0xFFFFD700);
@@ -13,6 +17,12 @@ const Color _pageBackground = Color(0xFFF5F5F5);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase with current platform options
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
   final WorkflowController workflowController = WorkflowController();
   await workflowController.init();
 

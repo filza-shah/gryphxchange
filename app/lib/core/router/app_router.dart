@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/command/command_center_page.dart';
@@ -9,7 +8,6 @@ import '../../features/listing/listing_detail_page.dart';
 import '../../features/wishlist/wishlist_page.dart';
 import '../providers/auth_provider.dart';
 import '../providers/workflow_provider.dart';
-import '../widgets/app_bottom_nav.dart';
 import '../../features/trade/presentation/trade_screen.dart';
 import '../../features/trade/presentation/verify_handshake_screen.dart';
 import '../../features/trade/models/display_trade.dart';

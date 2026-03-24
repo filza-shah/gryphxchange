@@ -83,7 +83,7 @@ class _OfferDialogState extends State<OfferDialog> {
               Column(
                 children: <Widget>[
                   DropdownButtonFormField<String>(
-                    value: widget.selectedTradeItem.isEmpty
+                    initialValue: widget.selectedTradeItem.isEmpty
                         ? null
                         : widget.selectedTradeItem,
                     decoration: const InputDecoration(
@@ -137,7 +137,7 @@ class _OfferDialogState extends State<OfferDialog> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               isExpanded: true,
-              value: widget.meetupLocation.isEmpty
+              initialValue: widget.meetupLocation.isEmpty
                   ? null
                   : widget.meetupLocation,
               decoration: const InputDecoration(
