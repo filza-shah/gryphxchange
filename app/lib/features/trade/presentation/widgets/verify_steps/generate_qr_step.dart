@@ -2,13 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 class GenerateQrStep extends StatelessWidget {
-  final String transactionId;
-  final VoidCallback onNext;
+  final String qrData;
+  final String title;
+  final String description;
+  final String statusText;
+  final String footerText;
 
   const GenerateQrStep({
     super.key,
-    required this.transactionId,
-    required this.onNext,
+    required this.qrData,
+    required this.title,
+    required this.description,
+    required this.statusText,
+    required this.footerText,
   });
 
   @override
@@ -24,14 +30,14 @@ class GenerateQrStep extends StatelessWidget {
           children: [
             const SizedBox(height: 24),
             Text(
-              'Dynamic QR Generated',
+              title,
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Trade flow: both parties scan each other QR codes.',
+              description,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: Colors.grey[600],
               ),
@@ -53,7 +59,7 @@ class GenerateQrStep extends StatelessWidget {
                 ],
               ),
               child: QrImageView(
-                data: transactionId,
+                data: qrData,
                 version: QrVersions.auto,
                 size: 260,
                 gapless: true,
@@ -66,27 +72,37 @@ class GenerateQrStep extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              'Transaction ID: $transactionId',
+              footerText,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: Colors.grey[600],
               ),
             ),
-            const SizedBox(height: 48),
-            SizedBox(
+            const SizedBox(height: 32),
+            Container(
               width: double.infinity,
-              child: FilledButton(
-                onPressed: onNext,
-                style: FilledButton.styleFrom(
-                  backgroundColor: red,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8F8F8),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE1E1E1)),
+              ),
+              child: Row(
+                children: <Widget>[
+                  const Icon(
+                    Icons.hourglass_top_rounded,
+                    color: Color(0xFF8B0000),
                   ),
-                ),
-                child: const Text(
-                  'Next: Scan & Verify',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      statusText,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: red,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
