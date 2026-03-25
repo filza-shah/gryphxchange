@@ -39,6 +39,8 @@ class VerifyHandshakeScreen extends ConsumerWidget {
           ? buyerId
           : sellerId;
 
+      // We update both offer and listing status together so trades never show
+      // as completed in one collection and pending in the other.
       transaction.set(offerRef, <String, dynamic>{
         'status': 'completed',
         'completedAt': FieldValue.serverTimestamp(),
@@ -59,6 +61,7 @@ class VerifyHandshakeScreen extends ConsumerWidget {
             (ratedUser['totalRatings'] as num?)?.toInt() ?? 0;
         final double oldRating = (ratedUser['rating'] as num?)?.toDouble() ?? 0;
         final int newTotalRatings = oldTotalRatings + 1;
+        // Running-average update avoids loading historical ratings documents.
         final double newAverageRating =
             ((oldRating * oldTotalRatings) + state.rating!) / newTotalRatings;
 

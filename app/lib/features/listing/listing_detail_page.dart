@@ -52,6 +52,8 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
       return;
     }
 
+    // Keep this as a plain string for now because offers store meetupDateTime
+    // in Firestore as text and the rest of the flow expects that format.
     _meetupDateController.text =
         '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
     setState(() {});
@@ -67,9 +69,11 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
     }
 
     if (listing.isTrade) {
+      // Trade offers must include at least one item; amount is optional here.
       return _selectedTradeItem.isNotEmpty;
     }
 
+    // Cash offers require a positive number before enabling submit.
     final double? amount = double.tryParse(_cashAmountController.text.trim());
     return amount != null && amount > 0;
   }
@@ -104,6 +108,8 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
       _isSubmittingOffer = true;
     });
 
+    // Null values are intentional: Firestore keeps a shared schema for cash and
+    // trade offers, and each mode ignores the fields it doesn't use.
     final Map<String, dynamic> offerPayload = <String, dynamic>{
       'buyerId': currentUser.uid,
       'createdAt': FieldValue.serverTimestamp(),
@@ -187,6 +193,8 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
+      // Once one offer is accepted, every other pending offer for this listing
+      // is closed out in the same write batch to avoid inconsistent states.
       final pendingOffers = await firestore
           .collection('offers')
           .where('listingId', isEqualTo: listing.id)
@@ -329,6 +337,8 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
           );
         }
 
+        // Show newest offers first; unresolved timestamps (rare right after
+        // creation) fall back to epoch so they sort to the end.
         offers.sort((a, b) {
           final dynamic aCreated = a.data()['createdAt'];
           final dynamic bCreated = b.data()['createdAt'];
@@ -514,6 +524,8 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
                     SizedBox(
                       height: 300,
                       child: PageView(
+                        // Listings without images still need a stable hero area,
+                        // so we fall back to a single stock image.
                         children: (listing.images.isNotEmpty
                                 ? listing.images
                                 : <String>[

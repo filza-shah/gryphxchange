@@ -66,6 +66,8 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
         final String fallbackName =
             email.split('@').first.replaceAll('.', ' ').trim();
 
+        // Create/merge a starter profile immediately so downstream screens can
+        // read seller/trust metadata without null checks.
         await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
           'name': fallbackName,
           'email': email,

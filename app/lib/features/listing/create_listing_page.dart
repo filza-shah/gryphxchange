@@ -228,6 +228,8 @@ class _CreateListingPageState extends State<CreateListingPage> {
     };
 
     try {
+      // Keep a lightweight user profile doc in sync so listing/detail screens
+      // can render seller info without extra joins.
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
         'name': sellerName,
         'email': email,
@@ -237,6 +239,8 @@ class _CreateListingPageState extends State<CreateListingPage> {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
+      // Listing is created after profile upsert so the nested seller snapshot
+      // and user document do not drift on first post.
       await FirebaseFirestore.instance.collection('listings').add(listingPayload);
 
       if (!mounted) {

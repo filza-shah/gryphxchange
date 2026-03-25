@@ -28,6 +28,7 @@ class FirestoreTradeRepository implements TradeRepository {
 
   @override
   Future<Trade?> getTradeById(String tradeId) async {
+    // Trade records are anchored on offers; listing info is loaded next.
     final offerDoc = await FirebaseFirestore.instance
         .collection('offers')
         .doc(tradeId)
@@ -57,6 +58,7 @@ class FirestoreTradeRepository implements TradeRepository {
     );
 
     final dynamic createdAtData = offer['createdAt'];
+    // Server timestamps can still be unresolved right after creation.
     final DateTime createdAt = createdAtData is Timestamp
         ? createdAtData.toDate()
         : DateTime.now();
@@ -71,6 +73,7 @@ class FirestoreTradeRepository implements TradeRepository {
       ((offer['tradeItems'] as List<dynamic>?) ?? const <dynamic>[])
         .whereType<String>()
         .toList(growable: false);
+    // Current UI supports selecting a single primary trade item.
     final String? tradeItemId = tradeItems.isEmpty ? null : tradeItems.first;
 
     return Trade(

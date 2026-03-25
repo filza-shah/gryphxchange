@@ -22,6 +22,7 @@ class _ScanVerifyStepState extends State<ScanVerifyStep> {
   void _simulateScan() {
     // In production, this would use camera to scan the other party's QR code.
     // For demo, we're simulating a successful scan.
+    // Keep payload format aligned with the generated QR step contract.
     widget.onScanned('OTHER-PARTY-TXN-CODE');
 
     setState(() => _scannedBoth = true);

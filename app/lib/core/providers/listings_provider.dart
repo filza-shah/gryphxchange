@@ -15,6 +15,7 @@ final listingsStreamProvider = StreamProvider<List<Listing>>((ref) {
         for (final doc in snapshot.docs) {
           final String status =
               ((doc.data()['status'] as String?) ?? 'active').toLowerCase();
+          // Keep completed/sold/traded items out of the browse feed.
           if (status == 'completed' || status == 'sold' || status == 'traded') {
             continue;
           }
