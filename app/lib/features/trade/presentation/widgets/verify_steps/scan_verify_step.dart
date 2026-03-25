@@ -25,7 +25,49 @@ class _ScanVerifyStepState extends State<ScanVerifyStep> {
   final MobileScannerController _scannerController = MobileScannerController();
   bool _isProcessingScan = false;
   bool _scanVerified = false;
-  String _statusMessage = 'Point camera at the QR code to verify the handshake.';
+  String _statusMessage =
+      'Point camera at the QR code to verify the handshake.';
+
+  void _handleScannerError(Object error, StackTrace stackTrace) {
+    if (!mounted) {
+      return;
+    }
+
+    final String message = switch (error) {
+      MobileScannerException exception
+          when exception.errorCode == MobileScannerErrorCode.permissionDenied =>
+        'Camera permission is required to scan QR codes. Allow camera access and reopen this screen.',
+      _ => 'Unable to access the camera right now. Please try again.',
+    };
+
+    setState(() {
+      _statusMessage = message;
+    });
+  }
+
+  Widget _buildScannerError(
+    BuildContext context,
+    MobileScannerException error,
+  ) {
+    final bool permissionDenied =
+        error.errorCode == MobileScannerErrorCode.permissionDenied;
+
+    return ColoredBox(
+      color: Colors.black,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            permissionDenied
+                ? 'Camera permission is required to scan QR codes. Allow camera access and try again.'
+                : 'Unable to start the camera preview. Please try again.',
+            style: const TextStyle(color: Colors.white),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -40,7 +82,8 @@ class _ScanVerifyStepState extends State<ScanVerifyStep> {
 
     if (scannedData != widget.expectedQrData) {
       setState(() {
-        _statusMessage = 'That QR code does not match this transaction. Try again.';
+        _statusMessage =
+            'That QR code does not match this transaction. Try again.';
       });
       return;
     }
@@ -113,6 +156,8 @@ class _ScanVerifyStepState extends State<ScanVerifyStep> {
                 borderRadius: BorderRadius.circular(14),
                 child: MobileScanner(
                   controller: _scannerController,
+                  onDetectError: _handleScannerError,
+                  errorBuilder: _buildScannerError,
                   onDetect: (capture) {
                     final String? rawValue = capture.barcodes.first.rawValue;
                     if (rawValue == null || rawValue.isEmpty) {
@@ -203,7 +248,9 @@ class _ScanVerifyStepState extends State<ScanVerifyStep> {
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
-                onPressed: _isProcessingScan || _scanVerified ? null : widget.onSkip,
+                onPressed: _isProcessingScan || _scanVerified
+                    ? null
+                    : widget.onSkip,
                 icon: const Icon(Icons.skip_next),
                 label: const Text('Skip for Testing'),
                 style: TextButton.styleFrom(foregroundColor: red),
