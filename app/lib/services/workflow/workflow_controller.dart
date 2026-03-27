@@ -142,6 +142,28 @@ class WorkflowController extends ChangeNotifier {
     );
     _notifyAndSave();
   }
+
+  /// Adds a new trade to workflow state as pending, if it does not already exist.
+  void addPendingTrade(String tradeId, TransactionMode mode) {
+    if (_state.tradeStates.containsKey(tradeId)) {
+      return;
+    }
+
+    _state = _state.copyWith(
+      tradeStates: <String, WorkflowTradeState>{
+        ..._state.tradeStates,
+        tradeId: WorkflowTradeState(
+          tradeId: tradeId,
+          mode: mode,
+          status: WorkflowTradeStatus.pending,
+          meetupLocation: null,
+          meetupTime: null,
+          matchesFound: 0,
+        ),
+      },
+    );
+    _notifyAndSave();
+  }
   /// Marks a transaction as fully complete, updating all related state in one atomic step.
   ///
   /// Does four things at once:
@@ -163,6 +185,15 @@ class WorkflowController extends ChangeNotifier {
     if (tradeState != null) {
       nextTradeStates[tradeId] = tradeState.copyWith(
         status: WorkflowTradeStatus.completed,
+      );
+    } else {
+      nextTradeStates[tradeId] = WorkflowTradeState(
+        tradeId: tradeId,
+        mode: mode,
+        status: WorkflowTradeStatus.completed,
+        meetupLocation: null,
+        meetupTime: null,
+        matchesFound: 0,
       );
     }
 

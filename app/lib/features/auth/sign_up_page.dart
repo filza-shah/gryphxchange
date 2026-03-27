@@ -1,39 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/providers/auth_provider.dart';
 
-/// Login screen for students
-/// This screen does 3 main things:
-/// 1) validates email/password input
-/// 2) sets auth state to logged in
-/// 3) sends the user to /home through go_router
-class LoginPage extends ConsumerStatefulWidget {
-  const LoginPage({super.key});
+/// Sign-up screen for new students
+class SignUpPage extends ConsumerStatefulWidget {
+  const SignUpPage({super.key});
 
   @override
-  ConsumerState<LoginPage> createState() => _LoginPageState();
+  ConsumerState<SignUpPage> createState() => _SignUpPageState();
 }
 
-class _LoginPageState extends ConsumerState<LoginPage> {
-  /// Reads text from the email input
+class _SignUpPageState extends ConsumerState<SignUpPage> {
   final TextEditingController _emailController = TextEditingController();
-
-  /// Reads text from the password input
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController = TextEditingController();
 
-  /// Toggles password visibility on/off
   bool _showPassword = false;
-
-  /// Current error message shown under the app title
+  bool _showConfirmPassword = false;
+  bool _isLoading = false;
   String _error = '';
 
-  /// Handles the Login button tap
-  /// Note! This is client-side validation only for now
-  /// Real backend authentication can be implemented later (when we figure it out)
-  void _handleLogin() {
+  Future<void> _handleSignUp() async {
     final String email = _emailController.text.trim();
     final String password = _passwordController.text;
+    final String confirmPassword = _confirmPasswordController.text;
 
     setState(() {
       _error = '';
@@ -46,24 +38,56 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       return;
     }
 
-    if (password.isEmpty) {
+    if (password.length < 6) {
       setState(() {
-        _error = 'Please enter your password';
+        _error = 'Password must be at least 6 characters';
       });
       return;
     }
 
-    ref.read(authServiceProvider).signIn(email: email, password: password).then((_) {
-      // Authentication successful, auth state will update and trigger router redirect
-    }).catchError((error) {
+    if (password != confirmPassword) {
       setState(() {
-        _error = 'Login failed. Please check your credentials and try again.';
+        _error = 'Passwords do not match';
       });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
     });
 
-    // Move to home. Router redirect rules also use authProvider so app-level guards stay consistent
-    if (mounted) {
-      context.go('/home');
+    try {
+      final userCredential = await ref
+          .read(authServiceProvider)
+          .signUp(email: email, password: password);
+
+      final user = userCredential.user;
+      if (user != null) {
+        final String fallbackName =
+            email.split('@').first.replaceAll('.', ' ').trim();
+
+        // Create/merge a starter profile immediately so downstream screens can
+        // read seller/trust metadata without null checks.
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'name': fallbackName,
+          'email': email,
+          'avatar': user.photoURL,
+          'rating': 0,
+          'totalRatings': 0,
+          'completedTrades': 0,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+
+      // Auth state stream updates automatically, router will redirect to /home
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Sign up failed. This email may already be in use.';
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -71,6 +95,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -78,15 +103,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        // Background styling for the login screen
         decoration: const BoxDecoration(
           gradient: RadialGradient(
             center: Alignment(-0.75, -0.9),
             radius: 1.35,
             colors: <Color>[
-              Color(0xFF3A0A0A), // deep red highlight center
-              Color(0xFF1C0505), // dark crimson mid
-              Color(0xFF0D0202), // near-black edge
+              Color(0xFF3A0A0A),
+              Color(0xFF1C0505),
+              Color(0xFF0D0202),
             ],
             stops: <double>[0.0, 0.58, 1.0],
           ),
@@ -106,7 +130,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     top: BorderSide(
                       color: Color(0xFFFFD700),
                       width: 3,
-                    ), // gold accent stripe
+                    ),
                   ),
                   boxShadow: const <BoxShadow>[
                     BoxShadow(
@@ -121,22 +145,22 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   children: <Widget>[
                     Image.asset(
                       'assets/images/gryphxchange_logo.png',
-                      width: 120,
-                      height: 120,
+                      width: 100,
+                      height: 100,
                       fit: BoxFit.contain,
                     ),
                     const SizedBox(height: 10),
                     const Text(
-                      'GryphXChange',
+                      'Create Account',
                       style: TextStyle(
-                        color: Color(0xFF8B0000), // Guelph maroon
-                        fontSize: 36,
+                        color: Color(0xFF8B0000),
+                        fontSize: 28,
                         fontWeight: FontWeight.w700,
                         height: 1.08,
                         letterSpacing: -0.3,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Text(
                       'University of Guelph Student Marketplace',
                       style: TextStyle(color: Colors.grey.shade700),
@@ -159,22 +183,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       ),
                     ],
                     const SizedBox(height: 16),
-                    // Email must be a valid UofG address for this prototype flow.
                     TextField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
                       onChanged: (String value) {
                         setState(() {});
-                        if (_error.isNotEmpty &&
-                            value.endsWith('@uoguelph.ca')) {
-                          _error = '';
+                        if (_error.isNotEmpty && value.endsWith('@uoguelph.ca')) {
+                          setState(() => _error = '');
                         }
                       },
                       decoration: InputDecoration(
                         labelText: 'University Email',
                         hintText: 'yourname@uoguelph.ca',
-                        helperText:
-                            _emailController.text.isNotEmpty &&
+                        helperText: _emailController.text.isNotEmpty &&
                                 !_emailController.text.endsWith('@uoguelph.ca')
                             ? 'Must be a @uoguelph.ca email address'
                             : ' ',
@@ -182,12 +203,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    // Password field (only checks non-empty for now).
                     TextField(
                       controller: _passwordController,
                       obscureText: !_showPassword,
                       decoration: InputDecoration(
                         labelText: 'Password',
+                        helperText: ' ',
                         border: const OutlineInputBorder(),
                         suffixIcon: IconButton(
                           icon: Icon(
@@ -203,24 +224,54 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _confirmPasswordController,
+                      obscureText: !_showConfirmPassword,
+                      decoration: InputDecoration(
+                        labelText: 'Confirm Password',
+                        helperText: ' ',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _showConfirmPassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _showConfirmPassword = !_showConfirmPassword;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
                     const SizedBox(height: 20),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
-                        // Triggers validation + auth state update + navigation.
-                        onPressed: _handleLogin,
+                        onPressed: _isLoading ? null : _handleSignUp,
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF8B0000),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
-                        child: const Text('Login'),
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text('Sign Up'),
                       ),
                     ),
                     const SizedBox(height: 12),
                     GestureDetector(
-                      onTap: () => context.go('/signup'),
+                      onTap: () => context.go('/login'),
                       child: Text(
-                        "Don't have an account yet? Sign up",
+                        'Already have an account? Log in',
                         style: TextStyle(
                           color: Colors.grey.shade600,
                           fontSize: 12,
