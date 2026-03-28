@@ -30,7 +30,9 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
   String _selectedTradeItem = '';
   String _meetupLocation = '';
   bool _isSubmittingOffer = false;
+  // Track per-offer mutations so buttons can show local loading states.
   String _acceptingOfferId = '';
+  String _rejectingOfferId = '';
 
   Future<void> _pickDateTime() async {
     final DateTime now = DateTime.now();
@@ -205,8 +207,10 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
         if (doc.id == offerId) {
           continue;
         }
+        // Close competing offers so buyers get a deterministic final result.
         batch.update(doc.reference, <String, dynamic>{
           'status': 'rejected',
+          'rejectionReason': 'Seller accepted another offer.',
           'respondedAt': FieldValue.serverTimestamp(),
         });
       }
@@ -240,6 +244,78 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
       if (mounted) {
         setState(() {
           _acceptingOfferId = '';
+        });
+      }
+    }
+  }
+
+  Future<void> _rejectOffer({required String offerId}) async {
+    if (_acceptingOfferId.isNotEmpty || _rejectingOfferId.isNotEmpty) {
+      return;
+    }
+
+    // Keep rejection explicit to avoid accidental declines.
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) => AlertDialog(
+        title: const Text('Reject Offer?'),
+        content: const Text(
+          'The buyer will see that this offer was rejected.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF8B0000),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() {
+      _rejectingOfferId = offerId;
+    });
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('offers')
+          .doc(offerId)
+          .update(<String, dynamic>{
+        'status': 'rejected',
+        'rejectionReason': 'Seller declined the offer.',
+        'respondedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Offer rejected.')),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to reject offer right now.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _rejectingOfferId = '';
         });
       }
     }
@@ -387,6 +463,8 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
 
     final bool canAccept = status == 'pending';
     final bool isAcceptingThis = _acceptingOfferId == offerDoc.id;
+    final bool isRejectingThis = _rejectingOfferId == offerDoc.id;
+    final bool isMutating = isAcceptingThis || isRejectingThis;
 
     return Container(
       width: double.infinity,
@@ -433,27 +511,49 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
           ],
           const SizedBox(height: 8),
           if (canAccept)
-            FilledButton(
-              onPressed: isAcceptingThis
-                  ? null
-                  : () => _acceptOffer(
-                        offerId: offerDoc.id,
-                        listing: listing,
-                        offerData: offer,
-                      ),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF8B0000),
-              ),
-              child: isAcceptingThis
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text('Accept Offer'),
+            Row(
+              children: <Widget>[
+                // Accept/Reject are shown together so sellers can resolve quickly.
+                FilledButton(
+                  onPressed: isMutating
+                      ? null
+                      : () => _acceptOffer(
+                            offerId: offerDoc.id,
+                            listing: listing,
+                            offerData: offer,
+                          ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF8B0000),
+                  ),
+                  child: isAcceptingThis
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Accept Offer'),
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton(
+                  onPressed: isMutating
+                      ? null
+                      : () => _rejectOffer(offerId: offerDoc.id),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF8B0000),
+                    side: const BorderSide(color: Color(0xFF8B0000)),
+                  ),
+                  child: isRejectingThis
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Reject Offer'),
+                ),
+              ],
             ),
         ],
       ),

@@ -58,7 +58,10 @@ class AppBottomNav extends StatelessWidget {
       items: const <BottomNavigationBarItem>[
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
         BottomNavigationBarItem(icon: Icon(Icons.add_circle), label: 'Post'),
-        BottomNavigationBarItem(icon: Icon(Icons.swap_horiz), label: 'Trades'),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.swap_horiz),
+          label: 'Trades & Offers',
+        ),
         BottomNavigationBarItem(
           icon: Icon(Icons.favorite_border),
           label: 'Wishlist',
