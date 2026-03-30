@@ -21,7 +21,7 @@ class CreateListingPage extends StatefulWidget {
 }
 
 class _CreateListingPageState extends State<CreateListingPage> {
-  static const String _googleBooksApiKey = '';
+  static const String _googleBooksApiKey = 'GOOGLE_BOOKS_API_KEY_HERE';
   static const int _maxImages = 6;
 
   static final FilteringTextInputFormatter _priceInputFormatter =
