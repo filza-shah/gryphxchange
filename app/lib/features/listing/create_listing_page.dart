@@ -520,6 +520,8 @@ class _CreateListingPageState extends State<CreateListingPage> {
         FirebaseFirestore.instance.collection('listings').doc();
 
     try {
+      // Keep a lightweight user profile doc in sync so listing/detail screens
+      // can render seller info without extra joins.
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
         'name': sellerName,
         'email': email,
@@ -529,6 +531,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
+<<<<<<< HEAD
       final List<String> imageUrls = await _resolveListingImageUrls(
         userId: user.uid,
         listingId: listingReference.id,
@@ -562,7 +565,17 @@ class _CreateListingPageState extends State<CreateListingPage> {
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      await listingReference.set(listingPayload);
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'name': sellerName,
+        'email': email,
+        'avatar': user.photoURL,
+        'rating': 0,
+        'totalRatings': 0,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      await FirebaseFirestore.instance.collection('listings').add(listingPayload);
 
       if (!mounted) {
         return;

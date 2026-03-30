@@ -183,6 +183,7 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
             (ratedUser['totalRatings'] as num?)?.toInt() ?? 0;
         final double oldRating = (ratedUser['rating'] as num?)?.toDouble() ?? 0;
         final int newTotalRatings = oldTotalRatings + 1;
+        // Running-average update avoids loading historical ratings documents.
         final double newAverageRating =
             ((oldRating * oldTotalRatings) + rating) / newTotalRatings;
 

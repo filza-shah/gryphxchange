@@ -14,6 +14,7 @@ import '../../services/workflow/workflow_controller.dart';
 final profileUserProvider = StreamProvider<Map<String, dynamic>>((ref) {
   final User? authUser = ref.watch(authStateProvider).asData?.value;
   if (authUser == null) {
+    // Stable guest payload keeps the profile screen renderable pre-login.
     return Stream.value(<String, dynamic>{
       'name': 'Guest',
       'email': 'Not signed in',
@@ -68,6 +69,8 @@ final myListingsProvider = StreamProvider<List<Listing>>((ref) {
           }
         }
 
+        // Firestore query cannot filter multiple status values directly here,
+        // so we trim and sort client-side for now.
         activeListings.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         return activeListings;
       });
