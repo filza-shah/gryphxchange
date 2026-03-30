@@ -361,7 +361,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
         _images.addAll(
           pickedImages
               .take(allowedCount)
-              .map((_picked) => _ListingImage.local(_picked.path)),
+              .map((pickedImage) => _ListingImage.local(pickedImage.path)),
         );
         if (pickedImages.length > allowedCount) {
           _imageError =
@@ -531,7 +531,6 @@ class _CreateListingPageState extends State<CreateListingPage> {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-<<<<<<< HEAD
       final List<String> imageUrls = await _resolveListingImageUrls(
         userId: user.uid,
         listingId: listingReference.id,
@@ -565,17 +564,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-    try {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'name': sellerName,
-        'email': email,
-        'avatar': user.photoURL,
-        'rating': 0,
-        'totalRatings': 0,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      await FirebaseFirestore.instance.collection('listings').add(listingPayload);
+      await listingReference.set(listingPayload);
 
       if (!mounted) {
         return;
@@ -591,15 +580,13 @@ class _CreateListingPageState extends State<CreateListingPage> {
       }
       setState(() {
         _submitError = 'Unable to create listing right now. Please try again.';
-        _isSubmitting = false;
       });
-      return;
-    }
-
-    if (mounted) {
-      setState(() {
-        _isSubmitting = false;
-      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
     }
   }
 
@@ -1127,7 +1114,7 @@ class _ListingImagePreview extends StatelessWidget {
         width: 100,
         height: 100,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) {
+        errorBuilder: (_, _, _) {
           return Container(
             width: 100,
             height: 100,
@@ -1144,7 +1131,7 @@ class _ListingImagePreview extends StatelessWidget {
       width: 100,
       height: 100,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) {
+      errorBuilder: (_, _, _) {
         return Container(
           width: 100,
           height: 100,
