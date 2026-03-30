@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/app_header.dart';
 import '../../core/widgets/app_bottom_nav.dart';
-import '../../models/mock_data.dart';
 import '../../services/workflow/workflow_controller.dart';
 import '../../services/workflow/workflow_state.dart';
 import '../../services/wishlist_firebase_service.dart';
@@ -24,6 +23,9 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
   
   /// Firebase service for wishlist operations
   final WishlistFirebaseService _wishlistService = WishlistFirebaseService();
+  
+  /// Firebase Firestore instance for listings queries
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
   /// Controller for the text input field (Quick Add)
   final TextEditingController _newItemController = TextEditingController();
@@ -83,9 +85,9 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
     }
   }
 
-  /// Find matches between wishlist items and available listings
-  /// Uses mock data for now - can be replaced with Firebase queries later
-  List<_WishlistMatch> _getMatches(List<String> wishlistTitles) {
+  /// Find matches between wishlist items and available listings from Firestore
+  /// Queries real listings from Firestore and calculates match scores
+  Future<List<_WishlistMatch>> _getMatches(List<String> wishlistTitles) async {
     if (wishlistTitles.isEmpty) return [];
     
     // Normalize wishlist titles for matching
@@ -94,33 +96,74 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
         .where((t) => t.isNotEmpty)
         .toList();
 
-    // Search through mock listings for matches
-    final matches = mockListings
-        .where((listing) {
-          // Combine all listing text for searching
-          final haystack = '${listing.title} ${listing.courseCode} ${listing.description}'.toLowerCase();
-          return terms.any(haystack.contains);
-        })
-        .map((listing) {
-          // Calculate match score (0-1)
-          double matchScore = 0.8; // Default score
-          List<String> matchReasons = ['Matches your wishlist'];
-          
-          return _WishlistMatch(
-            id: 'listing-${listing.id}',
-            type: listing.isTrade ? MatchType.trade : MatchType.sale,
-            title: listing.title,
-            subtitle: listing.isTrade
-                ? 'Trade listing • ${listing.courseCode}'
-                : 'Sale listing • \$${listing.price?.toStringAsFixed(0) ?? ''}',
-            listingId: listing.id,
-            matchScore: matchScore,
-            matchReasons: matchReasons,
-          );
-        })
-        .toList();
-    
-    return matches;
+    try {
+      // Query Firestore for active listings only
+      final QuerySnapshot listingsSnapshot = await _firestore
+          .collection('listings')
+          .where('status', isEqualTo: 'active')
+          .get();
+      
+      final List<_WishlistMatch> matches = [];
+      
+      // Loop through each listing and calculate match score
+      for (var doc in listingsSnapshot.docs) {
+        final listing = doc.data() as Map<String, dynamic>;
+        final listingTitle = listing['title']?.toLowerCase() ?? '';
+        final listingDesc = listing['description']?.toLowerCase() ?? '';
+        final listingCategory = listing['category']?.toLowerCase() ?? '';
+        
+        // Combine all searchable text
+        final haystack = '$listingTitle $listingDesc $listingCategory';
+        
+        // Calculate match score based on keyword matches
+        int matchedTerms = 0;
+        List<String> matchReasons = [];
+        
+        for (var term in terms) {
+          if (haystack.contains(term)) {
+            matchedTerms++;
+            matchReasons.add('Matches keyword: "$term"');
+          }
+        }
+        
+        // Add additional match reasons based on price
+        if (listing['price'] != null && listing['price'] < 50) {
+          matchReasons.add('Affordable price');
+        }
+        
+        // Add trade availability reason
+        if (listing['isTrade'] == true) {
+          matchReasons.add('Available for trade');
+        }
+        
+        // Calculate match percentage (0.0 to 1.0)
+        double matchScore = terms.isEmpty ? 0 : matchedTerms / terms.length;
+        
+        // Only include if there's at least one match
+        if (matchedTerms > 0) {
+          matches.add(_WishlistMatch(
+            id: 'listing-${doc.id}',
+            type: listing['isTrade'] == true ? MatchType.trade : MatchType.sale,
+            title: listing['title'] ?? 'Untitled',
+            subtitle: listing['isTrade'] == true
+                ? 'Trade listing • ${listing['courseCode'] ?? ''}'
+                : 'Sale listing • \$${listing['price']?.toStringAsFixed(0) ?? '0'}',
+            listingId: doc.id,
+            matchScore: matchScore.clamp(0.0, 1.0),
+            matchReasons: matchReasons.take(3).toList(), // Limit to 3 reasons
+          ));
+        }
+      }
+      
+      // Sort matches by score (highest first)
+      matches.sort((a, b) => b.matchScore.compareTo(a.matchScore));
+      
+      return matches;
+      
+    } catch (e) {
+      print('Error fetching listings: $e');
+      return [];
+    }
   }
 
   // ==================== DIALOG METHODS ====================
@@ -211,7 +254,6 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
                 onPressed: () async {
                   if (titleController.text.trim().isNotEmpty) {
                     try {
-                      // Add to Firebase
                       await _wishlistService.addWishlistItem(
                         title: titleController.text.trim(),
                         category: selectedCategory,
@@ -261,7 +303,6 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Title input
                 TextField(
                   controller: titleController,
                   decoration: const InputDecoration(
@@ -270,7 +311,6 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Category dropdown
                 DropdownButtonFormField<String>(
                   value: category,
                   decoration: const InputDecoration(
@@ -291,7 +331,6 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
                   },
                 ),
                 const SizedBox(height: 12),
-                // Price input
                 TextField(
                   controller: priceController,
                   decoration: const InputDecoration(
@@ -302,7 +341,6 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 12),
-                // Urgent checkbox
                 Row(
                   children: [
                     Checkbox(
@@ -326,7 +364,6 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
               TextButton(
                 onPressed: () async {
                   try {
-                    // Update in Firebase
                     await _wishlistService.updateWishlistItem(
                       docId: docId,
                       title: titleController.text,
@@ -370,7 +407,6 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
           TextButton(
             onPressed: () async {
               try {
-                // Delete from Firebase
                 await _wishlistService.deleteWishlistItem(docId);
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -404,7 +440,6 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
           TextButton(
             onPressed: () async {
               try {
-                // Delete all items from Firebase
                 await _wishlistService.clearAllWishlistItems();
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -427,22 +462,22 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    // StreamBuilder for real-time Firebase updates
+    // StreamBuilder for real-time wishlist updates from Firebase
     return StreamBuilder<QuerySnapshot>(
       stream: _wishlistService.getUserWishlist(),
-      builder: (context, snapshot) {
-        // Handle errors
-        if (snapshot.hasError) {
+      builder: (context, wishlistSnapshot) {
+        // Handle wishlist errors
+        if (wishlistSnapshot.hasError) {
           return Scaffold(
             bottomNavigationBar: const AppBottomNav(currentRoute: '/wishlist'),
             body: Center(
-              child: Text('Error: ${snapshot.error}'),
+              child: Text('Error: ${wishlistSnapshot.error}'),
             ),
           );
         }
 
-        // Show loading indicator while fetching data
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        // Show loading indicator while fetching wishlist
+        if (wishlistSnapshot.connectionState == ConnectionState.waiting) {
           return Scaffold(
             bottomNavigationBar: const AppBottomNav(currentRoute: '/wishlist'),
             body: const Center(
@@ -452,7 +487,7 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
         }
 
         // Extract wishlist items from Firestore
-        final wishlistDocs = snapshot.data?.docs ?? [];
+        final wishlistDocs = wishlistSnapshot.data?.docs ?? [];
         final wishlistItems = wishlistDocs.map((doc) {
           return {
             'id': doc.id,
@@ -460,55 +495,69 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
           };
         }).toList();
         
-        // Get matches for current wishlist items
         final wishlistTitles = wishlistItems.map((item) => item['title'] as String).toList();
-        final matches = _getMatches(wishlistTitles);
         
-        // Separate matches by type for display
-        final saleMatches = matches.where((m) => m.type == MatchType.sale).toList();
-        final tradeMatches = matches.where((m) => m.type == MatchType.trade).toList();
+        // Use FutureBuilder for async matches from Firestore listings
+        return FutureBuilder<List<_WishlistMatch>>(
+          future: _getMatches(wishlistTitles),
+          builder: (context, matchSnapshot) {
+            // Show loading while fetching matches
+            if (matchSnapshot.connectionState == ConnectionState.waiting) {
+              return Scaffold(
+                bottomNavigationBar: const AppBottomNav(currentRoute: '/wishlist'),
+                body: const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
+            
+            final matches = matchSnapshot.data ?? [];
+            final saleMatches = matches.where((m) => m.type == MatchType.sale).toList();
+            final tradeMatches = matches.where((m) => m.type == MatchType.trade).toList();
 
-        return Scaffold(
-          bottomNavigationBar: const AppBottomNav(currentRoute: '/wishlist'),
-          body: Column(
-            children: <Widget>[
-              // App header with title and search
-              AppHeader(
-                title: 'Wishlist',
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.search),
-                    onPressed: () {
-                      // TODO: Implement search functionality
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Search coming soon!')),
-                      );
-                    },
+            return Scaffold(
+              bottomNavigationBar: const AppBottomNav(currentRoute: '/wishlist'),
+              body: Column(
+                children: <Widget>[
+                  // App header with title and search
+                  AppHeader(
+                    title: 'Wishlist',
+                    actions: [
+                      IconButton(
+                        icon: const Icon(Icons.search),
+                        onPressed: () {
+                          // TODO: Implement search functionality
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Search coming soon!')),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  // Tab bar for switching between views
+                  TabBar(
+                    controller: _tabController,
+                    labelColor: const Color(0xFF8B0000),
+                    indicatorColor: const Color(0xFF8B0000),
+                    tabs: <Widget>[
+                      Tab(text: 'My Wishlist (${wishlistItems.length})'),
+                      Tab(text: 'Matches (${matches.length})'),
+                    ],
+                  ),
+                  // Tab content
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: <Widget>[
+                        _buildWishlistTab(wishlistItems),
+                        _buildMatchesTab(matches, tradeMatches, saleMatches),
+                      ],
+                    ),
                   ),
                 ],
               ),
-              // Tab bar for switching between views
-              TabBar(
-                controller: _tabController,
-                labelColor: const Color(0xFF8B0000),
-                indicatorColor: const Color(0xFF8B0000),
-                tabs: <Widget>[
-                  Tab(text: 'My Wishlist (${wishlistItems.length})'),
-                  Tab(text: 'Matches (${matches.length})'),
-                ],
-              ),
-              // Tab content
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: <Widget>[
-                    _buildWishlistTab(wishlistItems),
-                    _buildMatchesTab(matches, tradeMatches, saleMatches),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -582,7 +631,7 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
                                   }
                                 },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF8B0000), // GryphXChange red
+                            backgroundColor: const Color(0xFF8B0000),
                             foregroundColor: Colors.white,
                             disabledBackgroundColor: Colors.grey.shade300,
                             disabledForegroundColor: Colors.grey.shade600,
@@ -874,8 +923,8 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
                     ),
                     decoration: BoxDecoration(
                       color: match.type == MatchType.trade
-                          ? const Color(0x40FFD700) // Yellow for trade
-                          : const Color(0x1A8B0000), // Red for sale
+                          ? const Color(0x40FFD700)
+                          : const Color(0x1A8B0000),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -896,7 +945,7 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
               const SizedBox(height: 8),
               // Subtitle (price/course info)
               Text(match.subtitle),
-              // Match score (if available)
+              // Match score
               if (match.matchScore > 0)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
