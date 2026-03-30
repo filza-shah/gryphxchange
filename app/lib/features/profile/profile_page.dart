@@ -31,10 +31,12 @@ final profileUserProvider = StreamProvider<Map<String, dynamic>>((ref) {
       .snapshots()
       .map((doc) {
         final Map<String, dynamic> data = doc.data() ?? <String, dynamic>{};
-        final String fallbackName = (authUser.displayName != null &&
+        final String fallbackName =
+            (authUser.displayName != null &&
                 authUser.displayName!.trim().isNotEmpty)
             ? authUser.displayName!.trim()
-            : (authUser.email?.split('@').first ?? 'GryphXChange User').toUpperCase();
+            : (authUser.email?.split('@').first ?? 'GryphXChange User')
+                  .toUpperCase();
 
         return <String, dynamic>{
           'name': (data['name'] as String?) ?? fallbackName,
@@ -60,9 +62,13 @@ final myListingsProvider = StreamProvider<List<Listing>>((ref) {
       .map((snapshot) {
         final List<Listing> activeListings = <Listing>[];
         for (final doc in snapshot.docs) {
-          final String status =
-              ((doc.data()['status'] as String?) ?? 'active').toLowerCase();
-          if (status != 'completed' && status != 'sold' && status != 'traded') {
+          final String status = ((doc.data()['status'] as String?) ?? 'active')
+              .toLowerCase();
+          if (status != 'completed' &&
+              status != 'sold' &&
+              status != 'traded' &&
+              status != 'inactive' &&
+              status != 'deleted') {
             activeListings.add(
               listingFromFirestoreMap(id: doc.id, data: doc.data()),
             );
@@ -89,8 +95,8 @@ final myCompletedListingsProvider = StreamProvider<List<Listing>>((ref) {
       .map((snapshot) {
         final List<Listing> completedListings = <Listing>[];
         for (final doc in snapshot.docs) {
-          final String status =
-              ((doc.data()['status'] as String?) ?? 'active').toLowerCase();
+          final String status = ((doc.data()['status'] as String?) ?? 'active')
+              .toLowerCase();
           if (status == 'completed' || status == 'sold' || status == 'traded') {
             completedListings.add(
               listingFromFirestoreMap(id: doc.id, data: doc.data()),
@@ -103,12 +109,75 @@ final myCompletedListingsProvider = StreamProvider<List<Listing>>((ref) {
 });
 
 /// Profile page for the currently logged-in user
-/// We're gonna use a mock user for now, 
+/// We're gonna use a mock user for now,
 /// but this page will eventually read from auth state to get the current user's info
 class ProfilePage extends ConsumerWidget {
   const ProfilePage({super.key, required this.workflowController});
 
   final WorkflowController workflowController;
+
+  Future<void> _confirmDeleteListing(
+    BuildContext context,
+    Listing listing,
+  ) async {
+    // soft delete keeps old offer/trade references from getting weird later on.
+    final bool? shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Delete Listing?'),
+          content: Text(
+            'This will hide "${listing.title}" from active listings. You can treat it like a safe remove for now.',
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF8B0000),
+              ),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldDelete != true) {
+      return;
+    }
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('listings')
+          .doc(listing.id)
+          .update(<String, dynamic>{
+            'status': 'inactive',
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Listing removed from active listings.')),
+      );
+    } catch (_) {
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not delete the listing right now.'),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -124,9 +193,8 @@ class ProfilePage extends ConsumerWidget {
           bottomNavigationBar: const AppBottomNav(currentRoute: '/profile'),
           body: profileUserAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stackTrace) => const Center(
-              child: Text('Unable to load profile right now.'),
-            ),
+            error: (error, stackTrace) =>
+                const Center(child: Text('Unable to load profile right now.')),
             data: (profileUser) {
               final String displayName =
                   (profileUser['name'] as String?)?.trim().isNotEmpty == true
@@ -134,224 +202,397 @@ class ProfilePage extends ConsumerWidget {
                   : 'GRYPHXCHANGE USER';
 
               return ListView(
-              children: <Widget>[
-              // Top profile header (identity, verification, rating, trust score)
-              Container(
-                color: const Color(0xFF8B0000),
-                padding: const EdgeInsets.fromLTRB(16, 30, 16, 20),
-                child: SafeArea(
-                  bottom: false,
-                  child: Column(
-                    children: <Widget>[
-                      CircleAvatar(
-                        radius: 40,
-                        backgroundColor: const Color(0xFFFFD700),
-                        child: Text(
-                          displayName[0].toUpperCase(),
-                          style: const TextStyle(
-                            color: Color(0xFF8B0000),
-                            fontSize: 32,
+                children: <Widget>[
+                  // Top profile header (identity, verification, rating, trust score)
+                  Container(
+                    color: const Color(0xFF8B0000),
+                    padding: const EdgeInsets.fromLTRB(16, 30, 16, 20),
+                    child: SafeArea(
+                      bottom: false,
+                      child: Column(
+                        children: <Widget>[
+                          CircleAvatar(
+                            radius: 40,
+                            backgroundColor: const Color(0xFFFFD700),
+                            child: Text(
+                              displayName[0].toUpperCase(),
+                              style: const TextStyle(
+                                color: Color(0xFF8B0000),
+                                fontSize: 32,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            displayName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 28,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: <Widget>[
+                              Text(
+                                profileUser['email'] as String? ?? '',
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.verified,
+                                color: Color(0xFFFFD700),
+                                size: 18,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              StarRating(
+                                value:
+                                    (profileUser['rating'] as num?)
+                                        ?.toDouble() ??
+                                    0,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '${(profileUser['rating'] as num?)?.toDouble() ?? 0} (${(profileUser['totalRatings'] as num?)?.toInt() ?? 0} reviews)',
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Trust Score: ${(profileUser['trustScore'] as num?)?.toInt() ?? 0}',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        // Quick stats cards
+                        Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: Card(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(14),
+                                  child: Column(
+                                    children: <Widget>[
+                                      Icon(
+                                        Icons.local_shipping,
+                                        size: 38,
+                                        color: Color(0xFF8B0000),
+                                      ),
+                                      SizedBox(height: 6),
+                                      Text(
+                                        '${(profileUser['completedTrades'] as num?)?.toInt() ?? 0}',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 24,
+                                        ),
+                                      ),
+                                      Text('Completed Trades'),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Card(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(14),
+                                  child: Column(
+                                    children: <Widget>[
+                                      const Icon(
+                                        Icons.attach_money,
+                                        size: 38,
+                                        color: Color(0xFFFFD700),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      userListingsAsync.when(
+                                        loading: () => const SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                        error: (error, stackTrace) =>
+                                            const Text('--'),
+                                        data: (userListings) => Text(
+                                          '${userListings.length}',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 24,
+                                          ),
+                                        ),
+                                      ),
+                                      const Text('Active Listings'),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        const Text(
+                          'My Listings',
+                          style: TextStyle(
+                            fontSize: 22,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        displayName,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: <Widget>[
-                          Text(
-                            profileUser['email'] as String? ?? '',
-                            style: const TextStyle(color: Colors.white),
+                        const SizedBox(height: 10),
+                        // Active listings owned by current user
+                        userListingsAsync.when(
+                          loading: () => const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            child: Center(child: CircularProgressIndicator()),
                           ),
-                          const SizedBox(width: 4),
-                          const Icon(
-                            Icons.verified,
-                            color: Color(0xFFFFD700),
-                            size: 18,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          StarRating(
-                            value:
-                                (profileUser['rating'] as num?)?.toDouble() ??
-                                0,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            '${(profileUser['rating'] as num?)?.toDouble() ?? 0} (${(profileUser['totalRatings'] as num?)?.toInt() ?? 0} reviews)',
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Trust Score: ${(profileUser['trustScore'] as num?)?.toInt() ?? 0}',
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    // Quick stats cards
-                    Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(14),
-                              child: Column(
-                                children: <Widget>[
-                                  Icon(
-                                    Icons.local_shipping,
-                                    size: 38,
-                                    color: Color(0xFF8B0000),
-                                  ),
-                                  SizedBox(height: 6),
-                                  Text(
-                                    '${(profileUser['completedTrades'] as num?)?.toInt() ?? 0}',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 24,
-                                    ),
-                                  ),
-                                  Text('Completed Trades'),
-                                ],
-                              ),
+                          error: (error, stackTrace) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Text(
+                              'Unable to load your listings right now.',
+                              style: TextStyle(color: Colors.grey.shade700),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(14),
-                              child: Column(
-                                children: <Widget>[
-                                  const Icon(
-                                    Icons.attach_money,
-                                    size: 38,
-                                    color: Color(0xFFFFD700),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  userListingsAsync.when(
-                                    loading: () => const SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
+                          data: (userListings) {
+                            if (userListings.isEmpty) {
+                              return Card(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(20),
+                                  child: Column(
+                                    children: <Widget>[
+                                      Text(
+                                        "You don't have any active listings",
+                                        style: TextStyle(
+                                          color: Colors.grey.shade700,
+                                        ),
                                       ),
-                                    ),
-                                    error: (error, stackTrace) => const Text('--'),
-                                    data: (userListings) => Text(
-                                      '${userListings.length}',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 24,
+                                      const SizedBox(height: 12),
+                                      FilledButton(
+                                        onPressed: () {
+                                          context.go('/create');
+                                        },
+                                        style: FilledButton.styleFrom(
+                                          backgroundColor: const Color(
+                                            0xFF8B0000,
+                                          ),
+                                        ),
+                                        child: const Text('Create a Listing'),
                                       ),
-                                    ),
+                                    ],
                                   ),
-                                  const Text('Active Listings'),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'My Listings',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    // Active listings owned by current user
-                    userListingsAsync.when(
-                      loading: () => const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                      error: (error, stackTrace) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Text(
-                          'Unable to load your listings right now.',
-                          style: TextStyle(color: Colors.grey.shade700),
-                        ),
-                      ),
-                      data: (userListings) {
-                        if (userListings.isEmpty) {
-                          return Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(20),
-                              child: Column(
-                                children: <Widget>[
-                                  Text(
-                                    "You don't have any active listings",
-                                    style: TextStyle(color: Colors.grey.shade700),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  FilledButton(
-                                    onPressed: () {
-                                      context.go('/create');
-                                    },
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor: const Color(0xFF8B0000),
-                                    ),
-                                    child: const Text('Create a Listing'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }
+                                ),
+                              );
+                            }
 
-                        return Column(
-                          children: userListings.map((listing) {
-                            final String previewImage = listing.images.isNotEmpty
-                                ? listing.images.first
-                                : 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=400';
+                            return Column(
+                              children: userListings
+                                  .map((listing) {
+                                    final String previewImage =
+                                        listing.images.isNotEmpty
+                                        ? listing.images.first
+                                        : 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=400';
 
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              child: InkWell(
-                                onTap: () {
-                                  context.push('/listing/${listing.id}');
-                                },
-                                child: Row(
-                                  children: <Widget>[
-                                    ClipRRect(
-                                      borderRadius: const BorderRadius.only(
-                                        topLeft: Radius.circular(12),
-                                        bottomLeft: Radius.circular(12),
+                                    return Card(
+                                      margin: const EdgeInsets.only(bottom: 10),
+                                      child: InkWell(
+                                        onTap: () {
+                                          context.push(
+                                            '/listing/${listing.id}',
+                                          );
+                                        },
+                                        child: Row(
+                                          children: <Widget>[
+                                            ClipRRect(
+                                              borderRadius:
+                                                  const BorderRadius.only(
+                                                    topLeft: Radius.circular(
+                                                      12,
+                                                    ),
+                                                    bottomLeft: Radius.circular(
+                                                      12,
+                                                    ),
+                                                  ),
+                                              child: Image.network(
+                                                previewImage,
+                                                width: 80,
+                                                height: 80,
+                                                fit: BoxFit.cover,
+                                                // lil fallback here so busted image urls
+                                                // don't nuke the whole listing row.
+                                                errorBuilder: (_, _, _) {
+                                                  return Container(
+                                                    width: 80,
+                                                    height: 80,
+                                                    color: Colors.grey.shade200,
+                                                    alignment: Alignment.center,
+                                                    child: Icon(
+                                                      Icons
+                                                          .image_not_supported_outlined,
+                                                      color:
+                                                          Colors.grey.shade600,
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                            Expanded(
+                                              child: Padding(
+                                                padding: const EdgeInsets.all(
+                                                  12,
+                                                ),
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: <Widget>[
+                                                    // quick seller controls live right beside each card,
+                                                    // so managing your own listings stays dead simple.
+                                                    Row(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: <Widget>[
+                                                        Expanded(
+                                                          child: Text(
+                                                            listing.title,
+                                                            maxLines: 2,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                            style:
+                                                                const TextStyle(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                        PopupMenuButton<String>(
+                                                          onSelected: (String value) {
+                                                            if (value ==
+                                                                'edit') {
+                                                              context.push(
+                                                                '/listing/${listing.id}/edit',
+                                                              );
+                                                              return;
+                                                            }
+                                                            if (value ==
+                                                                'delete') {
+                                                              _confirmDeleteListing(
+                                                                context,
+                                                                listing,
+                                                              );
+                                                            }
+                                                          },
+                                                          itemBuilder: (BuildContext context) =>
+                                                              const <
+                                                                PopupMenuEntry<
+                                                                  String
+                                                                >
+                                                              >[
+                                                                PopupMenuItem<
+                                                                  String
+                                                                >(
+                                                                  value: 'edit',
+                                                                  child: Text(
+                                                                    'Edit listing',
+                                                                  ),
+                                                                ),
+                                                                PopupMenuItem<
+                                                                  String
+                                                                >(
+                                                                  value:
+                                                                      'delete',
+                                                                  child: Text(
+                                                                    'Delete listing',
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    Text(
+                                                      listing.courseCode,
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: TextStyle(
+                                                        color: Colors
+                                                            .grey
+                                                            .shade700,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      listing.isTrade
+                                                          ? 'Trade'
+                                                          : '\$${listing.price?.toStringAsFixed(0) ?? ''}',
+                                                      style: const TextStyle(
+                                                        color: Color(
+                                                          0xFF8B0000,
+                                                        ),
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        fontSize: 20,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                      child: Image.network(
-                                        previewImage,
-                                        width: 80,
-                                        height: 80,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                    Expanded(
+                                    );
+                                  })
+                                  .toList(growable: false),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Transaction History',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        completedListingsAsync.when(
+                          loading: () => const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            child: Center(child: CircularProgressIndicator()),
+                          ),
+                          error: (error, stackTrace) => Text(
+                            'Unable to load transaction history right now.',
+                            style: TextStyle(color: Colors.grey.shade700),
+                          ),
+                          data: (completedListings) {
+                            if (completedListings.isEmpty) {
+                              return Text(
+                                'No completed transactions yet.',
+                                style: TextStyle(color: Colors.grey.shade700),
+                              );
+                            }
+
+                            return Column(
+                              children: completedListings
+                                  .map((listing) {
+                                    return Card(
+                                      margin: const EdgeInsets.only(bottom: 8),
                                       child: Padding(
                                         padding: const EdgeInsets.all(12),
                                         child: Column(
@@ -361,123 +602,60 @@ class ProfilePage extends ConsumerWidget {
                                             Text(
                                               listing.title,
                                               style: const TextStyle(
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                            Text(
-                                              listing.courseCode,
-                                              style: TextStyle(
-                                                color: Colors.grey.shade700,
-                                              ),
-                                            ),
-                                            Text(
-                                              listing.isTrade
-                                                  ? 'Trade'
-                                                  : '\$${listing.price?.toStringAsFixed(0) ?? ''}',
-                                              style: const TextStyle(
-                                                color: Color(0xFF8B0000),
                                                 fontWeight: FontWeight.w700,
-                                                fontSize: 20,
                                               ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            const Chip(
+                                              label: Text('Completed'),
                                             ),
                                           ],
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                                    );
+                                  })
+                                  .toList(growable: false),
                             );
-                          }).toList(growable: false),
-                        );
-                      },
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                        const Divider(),
+                        ListTile(
+                          leading: const Icon(
+                            Icons.settings,
+                            color: Color(0xFF8B0000),
+                          ),
+                          title: const Text('Account Settings'),
+                          onTap: () {},
+                        ),
+                        ListTile(
+                          leading: const Icon(
+                            Icons.help,
+                            color: Color(0xFF8B0000),
+                          ),
+                          title: const Text('Help & Support'),
+                          onTap: () {},
+                        ),
+                        ListTile(
+                          leading: const Icon(
+                            Icons.logout,
+                            color: Color(0xFF8B0000),
+                          ),
+                          title: const Text('Logout'),
+                          onTap: () async {
+                            // sign out the user and return to login page. Router redirect rules will also prevent access to protected routes after logout
+                            await ref.read(authServiceProvider).signOut();
+                            workflowController.resetWorkflowState();
+                            if (context.mounted) {
+                              context.go('/login');
+                            }
+                          },
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Transaction History',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    completedListingsAsync.when(
-                      loading: () => const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                      error: (error, stackTrace) => Text(
-                        'Unable to load transaction history right now.',
-                        style: TextStyle(color: Colors.grey.shade700),
-                      ),
-                      data: (completedListings) {
-                        if (completedListings.isEmpty) {
-                          return Text(
-                            'No completed transactions yet.',
-                            style: TextStyle(color: Colors.grey.shade700),
-                          );
-                        }
-
-                        return Column(
-                          children: completedListings.map((listing) {
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: <Widget>[
-                                    Text(
-                                      listing.title,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    const Chip(label: Text('Completed')),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }).toList(growable: false),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                    const Divider(),
-                    ListTile(
-                      leading: const Icon(
-                        Icons.settings,
-                        color: Color(0xFF8B0000),
-                      ),
-                      title: const Text('Account Settings'),
-                      onTap: () {},
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.help, color: Color(0xFF8B0000)),
-                      title: const Text('Help & Support'),
-                      onTap: () {},
-                    ),
-                    ListTile(
-                      leading: const Icon(
-                        Icons.logout,
-                        color: Color(0xFF8B0000),
-                      ),
-                      title: const Text('Logout'),
-                      onTap: () async {
-                        // sign out the user and return to login page. Router redirect rules will also prevent access to protected routes after logout
-                        await ref.read(authServiceProvider).signOut();
-                        workflowController.resetWorkflowState();
-                        if (context.mounted) {
-                          context.go('/login');
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              ],
-            );
+                  ),
+                ],
+              );
             },
           ),
         );

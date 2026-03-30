@@ -19,7 +19,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: '/login',
     redirect: (context, state) {
       final isLoggedIn = ref.watch(authStateProvider).asData?.value != null;
-      final onAuthPage = state.matchedLocation == '/login' ||
+      final onAuthPage =
+          state.matchedLocation == '/login' ||
           state.matchedLocation == '/signup';
 
       if (!isLoggedIn && !onAuthPage) return '/login';
@@ -40,6 +41,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/listing/:listingId',
         builder: (context, state) =>
             ListingDetailPage(listingId: state.pathParameters['listingId']!),
+      ),
+      GoRoute(
+        path: '/listing/:listingId/edit',
+        builder: (context, state) =>
+            CreateListingPage(listingId: state.pathParameters['listingId']!),
       ),
       GoRoute(
         path: '/create',
@@ -72,4 +78,3 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
-

@@ -14,7 +14,9 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../core/widgets/app_bottom_nav.dart';
 
 class CreateListingPage extends StatefulWidget {
-  const CreateListingPage({super.key});
+  const CreateListingPage({super.key, this.listingId});
+
+  final String? listingId;
 
   @override
   State<CreateListingPage> createState() => _CreateListingPageState();
@@ -47,10 +49,13 @@ class _CreateListingPageState extends State<CreateListingPage> {
   bool _scanLoading = false;
   bool _imageLoading = false;
   bool _isSubmitting = false;
+  bool _isLoadingListing = false;
   String _scanError = '';
   String _imageError = '';
   String _submitError = '';
   int _bookMatchesFound = 0;
+
+  bool get _isEditing => widget.listingId != null;
 
   static const Map<String, _IsbnBook> _isbnSeed = <String, _IsbnBook>{
     '9780131103627': _IsbnBook(
@@ -83,12 +88,117 @@ class _CreateListingPageState extends State<CreateListingPage> {
 
   int get _remainingImageSlots => _maxImages - _images.length;
 
+  @override
+  void initState() {
+    super.initState();
+    if (_isEditing) {
+      _loadExistingListing();
+    }
+  }
+
   String _normalizeIsbn(String value) {
     return value.trim().replaceAll(RegExp(r'[^0-9Xx]'), '').toUpperCase();
   }
 
   bool _isValidIsbn(String isbn) {
     return isbn.length == 10 || isbn.length == 13;
+  }
+
+  Future<void> _loadExistingListing() async {
+    final String? listingId = widget.listingId;
+    if (listingId == null) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingListing = true;
+      _submitError = '';
+    });
+
+    try {
+      final User? user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('not-signed-in');
+      }
+
+      final DocumentSnapshot<Map<String, dynamic>> snapshot =
+          await FirebaseFirestore.instance
+              .collection('listings')
+              .doc(listingId)
+              .get();
+
+      final Map<String, dynamic>? data = snapshot.data();
+      if (!snapshot.exists || data == null) {
+        throw Exception('listing-missing');
+      }
+
+      final String sellerId =
+          (data['sellerId'] as String?) ?? (data['userId'] as String?) ?? '';
+      if (sellerId != user.uid) {
+        throw Exception('not-owner');
+      }
+
+      final bool isTrade =
+          (data['isTrade'] as bool?) ??
+          ((data['offerType'] as String?)?.toLowerCase() == 'trade');
+      final List<String> imageUrls =
+          ((data['images'] as List<dynamic>?) ?? const <dynamic>[])
+              .whereType<String>()
+              .toList(growable: false);
+      final String rawIsbn =
+          (data['isbn'] as String?)?.trim() ??
+          (data['isbn13'] as String?)?.trim() ??
+          '';
+
+      setState(() {
+        // lil note: edit mode should feel like the old form, just prefilled.
+        _titleController.text = (data['title'] as String?) ?? '';
+        _descriptionController.text = (data['description'] as String?) ?? '';
+        _courseCodeController.text = (data['courseCode'] as String?) ?? '';
+        _authorController.text = (data['author'] as String?) ?? '';
+        _editionController.text = (data['edition'] as String?) ?? '';
+        _semester = data['semester'] as String?;
+        _offerType = isTrade ? 'trade' : 'cash';
+        _priceController.text =
+            ((data['price'] as num?)?.toDouble())?.toStringAsFixed(2) ?? '';
+        _tradeForController.text =
+            (data['tradeFor'] as String?) ??
+            (data['tradeForDescription'] as String?) ??
+            '';
+        _isbnController.text = rawIsbn;
+        _images
+          ..clear()
+          ..addAll(
+            imageUrls.map(
+              (String url) => _ListingImage.remote(url, isBookCover: false),
+            ),
+          );
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      final String message = switch (error.toString()) {
+        String value when value.contains('not-owner') =>
+          'You can only edit listings that belong to your account.',
+        String value when value.contains('listing-missing') =>
+          'That listing could not be found anymore.',
+        String value when value.contains('not-signed-in') =>
+          'You need to sign in before editing a listing.',
+        _ => 'Unable to load this listing right now. Please try again.',
+      };
+
+      setState(() {
+        _submitError = message;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingListing = false;
+        });
+      }
+    }
   }
 
   void _applyBookCover(String coverUrl) {
@@ -490,7 +600,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
   }
 
   Future<void> _handleSubmit() async {
-    if (_isSubmitDisabled) {
+    if (_isSubmitDisabled || _isLoadingListing) {
       return;
     }
 
@@ -517,7 +627,11 @@ class _CreateListingPageState extends State<CreateListingPage> {
     final bool isTrade = _offerType == 'trade';
     final double? parsedPrice = double.tryParse(_priceController.text.trim());
     final DocumentReference<Map<String, dynamic>> listingReference =
-        FirebaseFirestore.instance.collection('listings').doc();
+        widget.listingId == null
+        ? FirebaseFirestore.instance.collection('listings').doc()
+        : FirebaseFirestore.instance
+              .collection('listings')
+              .doc(widget.listingId);
 
     try {
       // Keep a lightweight user profile doc in sync so listing/detail screens
@@ -560,20 +674,31 @@ class _CreateListingPageState extends State<CreateListingPage> {
           'rating': 0,
           'totalRatings': 0,
         },
-        'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      await listingReference.set(listingPayload);
+      if (_isEditing) {
+        // keep seller info steady, just refresh the editable listing fields.
+        await listingReference.update(listingPayload);
+      } else {
+        listingPayload['createdAt'] = FieldValue.serverTimestamp();
+        await listingReference.set(listingPayload);
+      }
 
       if (!mounted) {
         return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Listing created successfully.')),
+        SnackBar(
+          content: Text(
+            _isEditing
+                ? 'Listing updated successfully.'
+                : 'Listing created successfully.',
+          ),
+        ),
       );
-      context.go('/home');
+      context.go(_isEditing ? '/profile' : '/home');
     } catch (_) {
       if (!mounted) {
         return;
@@ -605,6 +730,9 @@ class _CreateListingPageState extends State<CreateListingPage> {
 
   @override
   Widget build(BuildContext context) {
+    final String pageTitle = _isEditing ? 'Edit Listing' : 'Create Listing';
+    final String submitLabel = _isEditing ? 'Save Changes' : 'Submit Listing';
+
     return Scaffold(
       bottomNavigationBar: const AppBottomNav(currentRoute: '/create'),
       body: Column(
@@ -620,9 +748,9 @@ class _CreateListingPageState extends State<CreateListingPage> {
                     onPressed: () => context.go('/home'),
                     icon: const Icon(Icons.close, color: Colors.white),
                   ),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Create Listing',
+                      pageTitle,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white,
@@ -640,6 +768,11 @@ class _CreateListingPageState extends State<CreateListingPage> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: <Widget>[
+                if (_isLoadingListing)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 16),
+                    child: LinearProgressIndicator(),
+                  ),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
@@ -1076,7 +1209,9 @@ class _CreateListingPageState extends State<CreateListingPage> {
                   ),
                 ],
                 FilledButton(
-                  onPressed: _isSubmitDisabled ? null : _handleSubmit,
+                  onPressed: (_isSubmitDisabled || _isLoadingListing)
+                      ? null
+                      : _handleSubmit,
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF8B0000),
                     padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1090,7 +1225,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text('Submit Listing'),
+                      : Text(submitLabel),
                 ),
               ],
             ),
@@ -1313,6 +1448,9 @@ class _ListingImage {
 
   const _ListingImage.local(String path)
     : this._(value: path, isLocal: true, isBookCover: false);
+
+  const _ListingImage.remote(String url, {required bool isBookCover})
+    : this._(value: url, isLocal: false, isBookCover: isBookCover);
 
   const _ListingImage.remoteBookCover(String url)
     : this._(value: url, isLocal: false, isBookCover: true);
