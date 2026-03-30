@@ -72,7 +72,7 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
           'name': fallbackName,
           'email': email,
           'avatar': user.photoURL,
-          'rating': 0,
+          'rating': 0.0,
           'totalRatings': 0,
           'completedTrades': 0,
           'createdAt': FieldValue.serverTimestamp(),

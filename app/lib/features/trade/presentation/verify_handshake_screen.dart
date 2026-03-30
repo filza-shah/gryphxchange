@@ -1,49 +1,98 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/workflow_provider.dart';
 import '../models/display_trade.dart';
 import 'providers/display_trades_provider.dart';
-import 'providers/verify_handshake_provider.dart';
 import 'widgets/verify_steps/generate_qr_step.dart';
-import 'widgets/verify_steps/scan_verify_step.dart';
 import 'widgets/verify_steps/rate_complete_step.dart';
+import 'widgets/verify_steps/scan_verify_step.dart';
 
-class VerifyHandshakeScreen extends ConsumerWidget {
-  final DisplayTrade trade;
-
+class VerifyHandshakeScreen extends ConsumerStatefulWidget {
   const VerifyHandshakeScreen({super.key, required this.trade});
 
-  Future<void> _persistCompletionAndRating(VerificationState state) async {
-    final FirebaseFirestore firestore = FirebaseFirestore.instance;
-    final DocumentReference<Map<String, dynamic>> offerRef =
-        firestore.collection('offers').doc(trade.id);
-    final DocumentReference<Map<String, dynamic>> listingRef =
-        firestore.collection('listings').doc(trade.listingId);
-    final User? currentUser = FirebaseAuth.instance.currentUser;
+  final DisplayTrade trade;
 
-    // This helps to update related data such as number of transactions and ratings to a user's profile after a transaction is completed.
+  @override
+  ConsumerState<VerifyHandshakeScreen> createState() =>
+      _VerifyHandshakeScreenState();
+}
+
+class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
+  DocumentReference<Map<String, dynamic>> get _offerRef =>
+      FirebaseFirestore.instance.collection('offers').doc(widget.trade.id);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _ensureVerificationInitialized();
+    });
+  }
+
+  Future<void> _ensureVerificationInitialized() async {
+    final offerSnapshot = await _offerRef.get();
+    final Map<String, dynamic> offer = offerSnapshot.data() ?? <String, dynamic>{};
+
+    final String sellerId = (offer['sellerId'] as String?) ?? '';
+    final String buyerId = (offer['buyerId'] as String?) ?? '';
+    if (sellerId.isEmpty || buyerId.isEmpty) {
+      return;
+    }
+
+    final Map<String, dynamic> updates = <String, dynamic>{};
+    if ((offer['verificationPhase'] as String?) == null) {
+      updates['verificationPhase'] = 'buyer_scans_seller';
+    }
+    if ((offer['sellerVerificationCode'] as String?) == null) {
+      updates['sellerVerificationCode'] = _sellerVerificationCode(sellerId);
+    }
+    if ((offer['buyerVerificationCode'] as String?) == null) {
+      updates['buyerVerificationCode'] = _buyerVerificationCode(buyerId);
+    }
+
+    if (updates.isNotEmpty) {
+      await _offerRef.set(updates, SetOptions(merge: true));
+    }
+  }
+
+  String _sellerVerificationCode(String sellerId) {
+    return 'offer:${widget.trade.id}:seller:$sellerId';
+  }
+
+  String _buyerVerificationCode(String buyerId) {
+    return 'offer:${widget.trade.id}:buyer:$buyerId';
+  }
+
+  Future<void> _markBuyerScannedSeller() async {
+    await _offerRef.set(<String, dynamic>{
+      'verificationPhase': 'seller_scans_buyer',
+      'buyerScannedSellerQrAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> _markSellerScannedBuyer() async {
+    final FirebaseFirestore firestore = FirebaseFirestore.instance;
+    final DocumentReference<Map<String, dynamic>> listingRef =
+        firestore.collection('listings').doc(widget.trade.listingId);
+
     await firestore.runTransaction((transaction) async {
-      final offerSnapshot = await transaction.get(offerRef);
+      final offerSnapshot = await transaction.get(_offerRef);
       final Map<String, dynamic> offer =
           offerSnapshot.data() ?? <String, dynamic>{};
-
       final String sellerId = (offer['sellerId'] as String?) ?? '';
       final String buyerId = (offer['buyerId'] as String?) ?? '';
-      final String currentUserId = currentUser?.uid ?? '';
 
-      final String ratedUserId =
-          currentUserId.isNotEmpty && currentUserId == sellerId
-          ? buyerId
-          : sellerId;
-
-      // We update both offer and listing status together so trades never show
-      // as completed in one collection and pending in the other.
-      transaction.set(offerRef, <String, dynamic>{
+      transaction.set(_offerRef, <String, dynamic>{
+        'verificationPhase': 'verified',
         'status': 'completed',
+        'sellerScannedBuyerQrAt': FieldValue.serverTimestamp(),
+        'verificationCompletedAt': FieldValue.serverTimestamp(),
         'completedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
       transaction.set(listingRef, <String, dynamic>{
@@ -51,7 +100,80 @@ class VerifyHandshakeScreen extends ConsumerWidget {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      if (ratedUserId.isNotEmpty && state.rating != null) {
+      final Set<String> completedCountedFor =
+          (((offer['completedTradesCountedFor'] as List<dynamic>?) ??
+                      const <dynamic>[])
+                  .whereType<String>()
+                  .toSet());
+
+      if (sellerId.isNotEmpty && !completedCountedFor.contains(sellerId)) {
+        final sellerRef = firestore.collection('users').doc(sellerId);
+        final sellerSnapshot = await transaction.get(sellerRef);
+        final int sellerCompleted =
+            (sellerSnapshot.data()?['completedTrades'] as num?)?.toInt() ?? 0;
+        transaction.set(sellerRef, <String, dynamic>{
+          'completedTrades': sellerCompleted + 1,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        completedCountedFor.add(sellerId);
+      }
+
+      if (buyerId.isNotEmpty && !completedCountedFor.contains(buyerId)) {
+        final buyerRef = firestore.collection('users').doc(buyerId);
+        final buyerSnapshot = await transaction.get(buyerRef);
+        final int buyerCompleted =
+            (buyerSnapshot.data()?['completedTrades'] as num?)?.toInt() ?? 0;
+        transaction.set(buyerRef, <String, dynamic>{
+          'completedTrades': buyerCompleted + 1,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        completedCountedFor.add(buyerId);
+      }
+
+      transaction.set(_offerRef, <String, dynamic>{
+        'completedTradesCountedFor': completedCountedFor.toList(growable: false),
+      }, SetOptions(merge: true));
+    });
+  }
+
+  Future<void> _persistRatingOnly(
+    Map<String, dynamic> offer,
+    double rating,
+    String feedback,
+  ) async {
+    final FirebaseFirestore firestore = FirebaseFirestore.instance;
+    final User? currentUser = FirebaseAuth.instance.currentUser;
+
+    await firestore.runTransaction((transaction) async {
+      final offerSnapshot = await transaction.get(_offerRef);
+      final Map<String, dynamic> latestOffer =
+          offerSnapshot.data() ?? <String, dynamic>{};
+
+      final String sellerId = (latestOffer['sellerId'] as String?) ?? '';
+      final String buyerId = (latestOffer['buyerId'] as String?) ?? '';
+      final String currentUserId = currentUser?.uid ?? '';
+      final Map<String, dynamic> ratingsByUser =
+          Map<String, dynamic>.from(
+            (latestOffer['ratingsByUser'] as Map?) ?? const <String, dynamic>{},
+          );
+
+      if (currentUserId.isEmpty || ratingsByUser.containsKey(currentUserId)) {
+        return;
+      }
+
+      final String ratedUserId =
+          currentUserId.isNotEmpty && currentUserId == sellerId
+          ? buyerId
+          : sellerId;
+
+      transaction.set(_offerRef, <String, dynamic>{
+        'ratingsByUser.$currentUserId': rating,
+        'feedbackByUser.$currentUserId': feedback,
+        'ratingSubmittedAtByUser.$currentUserId': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (ratedUserId.isNotEmpty) {
         final ratedUserRef = firestore.collection('users').doc(ratedUserId);
         final ratedUserSnapshot = await transaction.get(ratedUserRef);
         final Map<String, dynamic> ratedUser =
@@ -63,7 +185,7 @@ class VerifyHandshakeScreen extends ConsumerWidget {
         final int newTotalRatings = oldTotalRatings + 1;
         // Running-average update avoids loading historical ratings documents.
         final double newAverageRating =
-            ((oldRating * oldTotalRatings) + state.rating!) / newTotalRatings;
+            ((oldRating * oldTotalRatings) + rating) / newTotalRatings;
 
         transaction.set(ratedUserRef, <String, dynamic>{
           'rating': newAverageRating,
@@ -72,141 +194,223 @@ class VerifyHandshakeScreen extends ConsumerWidget {
         }, SetOptions(merge: true));
       }
 
-      if (sellerId.isNotEmpty) {
-        final sellerRef = firestore.collection('users').doc(sellerId);
-        final sellerSnapshot = await transaction.get(sellerRef);
-        final int sellerCompleted =
-            (sellerSnapshot.data()?['completedTrades'] as num?)?.toInt() ?? 0;
-
-        transaction.set(sellerRef, <String, dynamic>{
-          'completedTrades': sellerCompleted + 1,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
-
-      if (buyerId.isNotEmpty) {
-        final buyerRef = firestore.collection('users').doc(buyerId);
-        final buyerSnapshot = await transaction.get(buyerRef);
-        final int buyerCompleted =
-            (buyerSnapshot.data()?['completedTrades'] as num?)?.toInt() ?? 0;
-
-        transaction.set(buyerRef, <String, dynamic>{
-          'completedTrades': buyerCompleted + 1,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
     });
   }
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final verificationState = ref.watch(verificationProvider(trade.id));
-    final verificationNotifier = ref.read(
-      verificationProvider(trade.id).notifier,
-    );
-
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: const Text('Verify Handshake'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFD700),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                trade.isTradeMode ? 'Trade' : 'Sale',
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Progress indicator showing the steps
-          _StepIndicator(currentStep: verificationState.currentStep),
-          // Step content
-          Expanded(
-            child: _buildStepContent(
-              context,
-              ref,
-              verificationState,
-              verificationNotifier,
-            ),
-          ),
-        ],
-      ),
-    );
+  int _currentStepIndex(String phase) {
+    switch (phase) {
+      case 'buyer_scans_seller':
+        return 0;
+      case 'seller_scans_buyer':
+        return 1;
+      case 'verified':
+      case 'completed':
+        return 2;
+      default:
+        return 0;
+    }
   }
 
   Widget _buildStepContent(
     BuildContext context,
-    WidgetRef ref,
-    VerificationState state,
-    VerificationNotifier notifier,
+    Map<String, dynamic> offer,
+    String currentUserId,
   ) {
-    switch (state.currentStep) {
-      case VerificationStep.generateQr:
-        return GenerateQrStep(
-          transactionId: state.transactionId,
-          onNext: notifier.moveToNextStep,
-        );
+    final String sellerId = (offer['sellerId'] as String?) ?? '';
+    final String buyerId = (offer['buyerId'] as String?) ?? '';
+    final String phase =
+        ((offer['verificationPhase'] as String?) ?? 'buyer_scans_seller');
+    final String offerStatus = ((offer['status'] as String?) ?? '').toLowerCase();
+    final Map<String, dynamic> ratingsByUser = Map<String, dynamic>.from(
+      (offer['ratingsByUser'] as Map?) ?? const <String, dynamic>{},
+    );
+    final String sellerCode =
+        (offer['sellerVerificationCode'] as String?) ??
+        _sellerVerificationCode(sellerId);
+    final String buyerCode =
+        (offer['buyerVerificationCode'] as String?) ??
+        _buyerVerificationCode(buyerId);
+    final bool isSeller = currentUserId == sellerId;
+    final bool isBuyer = currentUserId == buyerId;
 
-      case VerificationStep.scanVerify:
-        return ScanVerifyStep(
-          transactionId: state.transactionId,
-          onNext: notifier.moveToNextStep,
-          onScanned: notifier.recordScannedQr,
-        );
-
-      case VerificationStep.rateComplete:
-        return RateCompleteStep(
-          transactionId: state.transactionId,
-          onRated: notifier.recordRating,
-          onComplete: () async {
-            await _persistCompletionAndRating(state);
-
-            final workflowController = ref.read(workflowControllerProvider);
-            workflowController.completeTransaction(
-              trade.id,
-              trade.listingId,
-              trade.mode,
-            );
-            ref.invalidate(displayTradesProvider);
-
-            // Navigate back to trades screen on completion
-            if (context.mounted) {
-              Navigator.of(context).popUntil((route) => route.isFirst);
-            }
-          },
-        );
+    if (!isSeller && !isBuyer) {
+      return const Center(
+        child: Text('You are not part of this transaction.'),
+      );
     }
+
+    final bool alreadyRated = ratingsByUser.containsKey(currentUserId);
+
+    if ((phase == 'verified' || phase == 'completed' || offerStatus == 'completed') &&
+        alreadyRated) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'This transaction is complete and you have already submitted your rating.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    if (phase == 'verified' || phase == 'completed' || offerStatus == 'completed') {
+      return RateCompleteStep(
+        transactionId: widget.trade.id,
+        onRated: (_) {},
+        onComplete: (double rating, String feedback) async {
+          await _persistRatingOnly(offer, rating, feedback);
+          ref.invalidate(displayTradesProvider);
+
+          if (context.mounted) {
+            Navigator.of(context).popUntil((route) => route.isFirst);
+          }
+        },
+      );
+    }
+
+    if (phase == 'buyer_scans_seller') {
+      if (isSeller) {
+        return GenerateQrStep(
+          qrData: sellerCode,
+          title: 'Show Your QR Code',
+          description:
+              'Buyer scans first. Ask the buyer to open Verify Handshake and scan this code.',
+          statusText: 'Waiting for buyer to scan your QR code.',
+          footerText: 'Order ID: ${widget.trade.id}',
+        );
+      }
+
+      return ScanVerifyStep(
+        title: 'Scan Seller QR',
+        description:
+            'Buyer scans first. Use your camera to scan the seller\'s QR code.',
+        expectedQrData: sellerCode,
+        onScanned: (_) => _markBuyerScannedSeller(),
+        onSkip: () {
+          _markBuyerScannedSeller();
+        },
+      );
+    }
+
+    if (isBuyer) {
+      return GenerateQrStep(
+        qrData: buyerCode,
+        title: 'Show Your QR Code',
+        description:
+            'Seller scans second. Ask the seller to scan this QR code now.',
+        statusText: 'Waiting for seller to scan your QR code.',
+        footerText: 'Order ID: ${widget.trade.id}',
+      );
+    }
+
+    return ScanVerifyStep(
+      title: 'Scan Buyer QR',
+      description:
+          'Seller scans second. Use your camera to scan the buyer\'s QR code.',
+      expectedQrData: buyerCode,
+      onScanned: (_) async {
+        await _markSellerScannedBuyer();
+
+        final workflowController = ref.read(workflowControllerProvider);
+        workflowController.completeTransaction(
+          widget.trade.id,
+          widget.trade.listingId,
+          widget.trade.mode,
+        );
+        ref.invalidate(displayTradesProvider);
+      },
+      onSkip: () async {
+        await _markSellerScannedBuyer();
+
+        final workflowController = ref.read(workflowControllerProvider);
+        workflowController.completeTransaction(
+          widget.trade.id,
+          widget.trade.listingId,
+          widget.trade.mode,
+        );
+        ref.invalidate(displayTradesProvider);
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: _offerRef.snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return const Scaffold(
+            body: Center(child: Text('Unable to load handshake verification.')),
+          );
+        }
+
+        final Map<String, dynamic> offer =
+            snapshot.data?.data() ?? <String, dynamic>{};
+        final String phase =
+            ((offer['verificationPhase'] as String?) ?? 'buyer_scans_seller');
+
+        return Scaffold(
+          appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            title: const Text('Verify Handshake'),
+            actions: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFD700),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    widget.trade.isTradeMode ? 'Trade' : 'Sale',
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          body: Column(
+            children: [
+              _StepIndicator(currentStepIndex: _currentStepIndex(phase)),
+              Expanded(
+                child: _buildStepContent(context, offer, currentUserId),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
 class _StepIndicator extends StatelessWidget {
-  final VerificationStep currentStep;
+  const _StepIndicator({required this.currentStepIndex});
 
-  const _StepIndicator({required this.currentStep});
+  final int currentStepIndex;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final steps = [
-      ('Generate QR', Icons.qr_code),
-      ('Scan & Verify', Icons.qr_code_scanner),
+    const steps = <(String, IconData)>[
+      ('Buyer Scans Seller', Icons.qr_code_scanner),
+      ('Seller Scans Buyer', Icons.qr_code_scanner_outlined),
       ('Rate & Complete', Icons.thumb_up),
     ];
 
@@ -215,11 +419,11 @@ class _StepIndicator extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: List.generate(steps.length, (index) {
-          final stepNum = index + 1;
-          final isCompleted = currentStep.index > index;
-          final isCurrent = currentStep.index == index;
-          final previousSegmentCompleted = currentStep.index > index - 1;
-          final nextSegmentCompleted = currentStep.index > index;
+          final int stepNum = index + 1;
+          final bool isCompleted = currentStepIndex > index;
+          final bool isCurrent = currentStepIndex == index;
+          final bool previousSegmentCompleted = currentStepIndex > index - 1;
+          final bool nextSegmentCompleted = currentStepIndex > index;
 
           return Expanded(
             child: Column(
@@ -263,8 +467,8 @@ class _StepIndicator extends StatelessWidget {
                           color: isCompleted
                               ? Colors.green
                               : isCurrent
-                              ? const Color(0xFF8B0000)
-                              : Colors.grey[300],
+                                  ? const Color(0xFF8B0000)
+                                  : Colors.grey[300],
                         ),
                         child: Center(
                           child: isCompleted
@@ -293,9 +497,8 @@ class _StepIndicator extends StatelessWidget {
                   child: Text(
                     steps[index].$1,
                     style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight: isCurrent
-                          ? FontWeight.bold
-                          : FontWeight.normal,
+                      fontWeight:
+                          isCurrent ? FontWeight.bold : FontWeight.normal,
                       color: isCurrent
                           ? const Color(0xFF8B0000)
                           : Colors.grey[600],

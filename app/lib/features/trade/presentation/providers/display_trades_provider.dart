@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/workflow_provider.dart';
 import '../../data/trade_repository.dart';
 import '../../models/display_trade.dart';
+import '../../../../services/workflow/workflow_state.dart';
 
 // Provider to fetch and prepare the list of trades for display in the UI.
 final displayTradesProvider = FutureProvider<List<DisplayTrade>>((ref) async {
@@ -28,7 +29,9 @@ final displayTradesProvider = FutureProvider<List<DisplayTrade>>((ref) async {
         otherUserName: sellerName,
         otherUserInitial: sellerName.isEmpty ? '?' : sellerName[0],
         mode: workflowTradeState.mode,
-        workflowStatus: workflowTradeState.status,
+        workflowStatus: trade.status.name == 'completed'
+            ? WorkflowTradeStatus.completed
+            : workflowTradeState.status,
       );
     }),
   );

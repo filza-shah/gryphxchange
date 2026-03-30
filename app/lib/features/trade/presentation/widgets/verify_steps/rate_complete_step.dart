@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 class RateCompleteStep extends StatefulWidget {
   final String transactionId;
-  final VoidCallback onComplete;
+  final Future<void> Function(double rating, String feedback) onComplete;
   final Function(double rating) onRated;
 
   const RateCompleteStep({
@@ -19,6 +19,7 @@ class RateCompleteStep extends StatefulWidget {
 class _RateCompleteStepState extends State<RateCompleteStep> {
   double _currentRating = 0;
   final TextEditingController _feedbackController = TextEditingController();
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -26,17 +27,26 @@ class _RateCompleteStepState extends State<RateCompleteStep> {
     super.dispose();
   }
 
-  void _submitRating() {
+  Future<void> _submitRating() async {
+    if (_isSubmitting) {
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
     widget.onRated(_currentRating);
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Transaction completed successfully'),
+        content: Text('Rating submitted successfully'),
         duration: Duration(seconds: 2),
       ),
     );
 
-    Future.delayed(const Duration(seconds: 2), widget.onComplete);
+    await Future<void>.delayed(const Duration(seconds: 2));
+    await widget.onComplete(_currentRating, _feedbackController.text.trim());
   }
 
   @override
@@ -53,7 +63,7 @@ class _RateCompleteStepState extends State<RateCompleteStep> {
           children: [
             const SizedBox(height: 24),
             Text(
-              'Rate & Complete',
+              'Rate Transaction',
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -163,7 +173,7 @@ class _RateCompleteStepState extends State<RateCompleteStep> {
                       children: [
                         Text('Status:', style: theme.textTheme.bodySmall),
                         Text(
-                          'Ready to Complete',
+                          'Completed',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: Colors.green,
                             fontWeight: FontWeight.w600,
@@ -179,7 +189,9 @@ class _RateCompleteStepState extends State<RateCompleteStep> {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: _currentRating > 0 ? _submitRating : null,
+                onPressed: _currentRating > 0 && !_isSubmitting
+                    ? _submitRating
+                    : null,
                 style: FilledButton.styleFrom(
                   backgroundColor: _currentRating > 0 ? red : Colors.grey[400],
                   padding: const EdgeInsets.symmetric(vertical: 16),
@@ -187,10 +199,22 @@ class _RateCompleteStepState extends State<RateCompleteStep> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                child: const Text(
-                  'Complete Transaction',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
+                child: _isSubmitting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text(
+                        'Submit Rating',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
               ),
             ),
           ],

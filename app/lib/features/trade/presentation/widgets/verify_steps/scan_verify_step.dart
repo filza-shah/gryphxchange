@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 class ScanVerifyStep extends StatefulWidget {
-  final String transactionId;
-  final VoidCallback onNext;
-  final Function(String scannedData) onScanned;
+  final String title;
+  final String description;
+  final String expectedQrData;
+  final Future<void> Function(String scannedData) onScanned;
+  final VoidCallback onSkip;
 
   const ScanVerifyStep({
     super.key,
-    required this.transactionId,
-    required this.onNext,
+    required this.title,
+    required this.description,
+    required this.expectedQrData,
     required this.onScanned,
+    required this.onSkip,
   });
 
   @override
@@ -17,17 +22,90 @@ class ScanVerifyStep extends StatefulWidget {
 }
 
 class _ScanVerifyStepState extends State<ScanVerifyStep> {
-  bool _scannedBoth = false;
+  final MobileScannerController _scannerController = MobileScannerController();
+  bool _isProcessingScan = false;
+  bool _scanVerified = false;
+  String _statusMessage =
+      'Point camera at the QR code to verify the handshake.';
 
-  void _simulateScan() {
-    // In production, this would use camera to scan the other party's QR code.
-    // For demo, we're simulating a successful scan.
-    // Keep payload format aligned with the generated QR step contract.
-    widget.onScanned('OTHER-PARTY-TXN-CODE');
+  void _handleScannerError(Object error, StackTrace stackTrace) {
+    if (!mounted) {
+      return;
+    }
 
-    setState(() => _scannedBoth = true);
+    final String message = switch (error) {
+      MobileScannerException exception
+          when exception.errorCode == MobileScannerErrorCode.permissionDenied =>
+        'Camera permission is required to scan QR codes. Allow camera access and reopen this screen.',
+      _ => 'Unable to access the camera right now. Please try again.',
+    };
 
-    // Show success feedback
+    setState(() {
+      _statusMessage = message;
+    });
+  }
+
+  Widget _buildScannerError(
+    BuildContext context,
+    MobileScannerException error,
+  ) {
+    final bool permissionDenied =
+        error.errorCode == MobileScannerErrorCode.permissionDenied;
+
+    return ColoredBox(
+      color: Colors.black,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            permissionDenied
+                ? 'Camera permission is required to scan QR codes. Allow camera access and try again.'
+                : 'Unable to start the camera preview. Please try again.',
+            style: const TextStyle(color: Colors.white),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _scannerController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleDetectedCode(String scannedData) async {
+    if (_isProcessingScan || _scanVerified) {
+      return;
+    }
+
+    if (scannedData != widget.expectedQrData) {
+      setState(() {
+        _statusMessage =
+            'That QR code does not match this transaction. Try again.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isProcessingScan = true;
+      _statusMessage = 'Verifying QR code...';
+    });
+
+    await _scannerController.stop();
+    await widget.onScanned(scannedData);
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _scanVerified = true;
+      _isProcessingScan = false;
+      _statusMessage = 'QR code verified successfully.';
+    });
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('QR code verified successfully'),
@@ -49,53 +127,48 @@ class _ScanVerifyStepState extends State<ScanVerifyStep> {
           children: [
             const SizedBox(height: 24),
             Text(
-              'Scan & Verify',
+              widget.title,
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Both parties need to scan each other\'s QR codes to verify the handshake.',
+              widget.description,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: Colors.grey[600],
               ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
-            // Camera placeholder
             Container(
               width: double.infinity,
               height: 280,
               decoration: BoxDecoration(
-                color: Colors.grey[100],
+                color: Colors.black,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: Colors.grey[300] ?? Colors.grey,
                   width: 2,
                 ),
               ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.qr_code_scanner,
-                    size: 64,
-                    color: Colors.grey[400],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Point camera at other party\'s QR code',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[600],
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: MobileScanner(
+                  controller: _scannerController,
+                  onDetectError: _handleScannerError,
+                  errorBuilder: _buildScannerError,
+                  onDetect: (capture) {
+                    final String? rawValue = capture.barcodes.first.rawValue;
+                    if (rawValue == null || rawValue.isEmpty) {
+                      return;
+                    }
+                    _handleDetectedCode(rawValue);
+                  },
+                ),
               ),
             ),
             const SizedBox(height: 24),
-            // Status indicators
             Row(
               children: [
                 Expanded(
@@ -111,13 +184,13 @@ class _ScanVerifyStepState extends State<ScanVerifyStep> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Your QR',
+                            'Camera',
                             style: theme.textTheme.bodySmall?.copyWith(
                               fontWeight: FontWeight.w500,
                             ),
                           ),
                           Text(
-                            'Generated',
+                            'Live',
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: Colors.green,
                             ),
@@ -135,23 +208,23 @@ class _ScanVerifyStepState extends State<ScanVerifyStep> {
                       child: Column(
                         children: [
                           Icon(
-                            _scannedBoth ? Icons.check_circle : Icons.pending,
+                            _scanVerified ? Icons.check_circle : Icons.pending,
                             size: 28,
-                            color: _scannedBoth
+                            color: _scanVerified
                                 ? Colors.green
                                 : Colors.grey[400],
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Their QR',
+                            'Verification',
                             style: theme.textTheme.bodySmall?.copyWith(
                               fontWeight: FontWeight.w500,
                             ),
                           ),
                           Text(
-                            _scannedBoth ? 'Scanned' : 'Pending',
+                            _scanVerified ? 'Matched' : 'Pending',
                             style: theme.textTheme.labelSmall?.copyWith(
-                              color: _scannedBoth
+                              color: _scanVerified
                                   ? Colors.green
                                   : Colors.grey[600],
                             ),
@@ -163,47 +236,26 @@ class _ScanVerifyStepState extends State<ScanVerifyStep> {
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            Text(
+              _statusMessage,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: _scanVerified ? Colors.green[700] : Colors.grey[700],
+              ),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _scannedBoth ? null : _simulateScan,
-                style: FilledButton.styleFrom(
-                  backgroundColor: _scannedBoth ? Colors.grey : red,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: Text(
-                  _scannedBoth ? 'Scanned & Verified' : 'Scan QR Code',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _isProcessingScan || _scanVerified
+                    ? null
+                    : widget.onSkip,
+                icon: const Icon(Icons.skip_next),
+                label: const Text('Skip for Testing'),
+                style: TextButton.styleFrom(foregroundColor: red),
               ),
             ),
-            if (_scannedBoth) ...[
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: widget.onNext,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: red,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text(
-                    'Next: Rate & Complete',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
       ),
