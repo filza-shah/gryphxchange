@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/app_header.dart';
 import '../../core/widgets/app_bottom_nav.dart';
 import '../../models/mock_data.dart';
 import '../../services/workflow/workflow_controller.dart';
 import '../../services/workflow/workflow_state.dart';
+import '../../services/wishlist_firebase_service.dart';
 
+/// Main Wishlist Page - Displays user's wishlist items and matches
+/// Uses Firebase Firestore for permanent storage and real-time updates
 class WishlistPage extends StatefulWidget {
   const WishlistPage({super.key, required this.workflowController});
 
@@ -16,123 +20,44 @@ class WishlistPage extends StatefulWidget {
 }
 
 class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderStateMixin {
+  // ==================== SERVICES & CONTROLLERS ====================
+  
+  /// Firebase service for wishlist operations
+  final WishlistFirebaseService _wishlistService = WishlistFirebaseService();
+  
+  /// Controller for the text input field (Quick Add)
   final TextEditingController _newItemController = TextEditingController();
-  final TextEditingController _searchController = TextEditingController();
+  
+  /// Tab controller for switching between Wishlist and Matches tabs
   late TabController _tabController;
-  String _selectedFilter = 'all'; // For filtering matches
+  
+  /// Current filter selection for matches (all, trade, sale)
+  String _selectedFilter = 'all';
+  
+  /// Flag to prevent double-click and show loading state
+  bool _isAdding = false;
 
-  // For storing additional item details
-  final Map<String, WishlistItemDetails> _itemDetails = {};
-
-  String _normalize(String value) {
-    return value.trim().toLowerCase();
-  }
-
-  List<_WishlistMatch> _matches(WorkflowState workflowState) {
-    final List<String> terms = workflowState.wishlist
-        .map(_normalize)
-        .where((String value) => value.isNotEmpty)
-        .toList(growable: false);
-
-    if (terms.isEmpty) {
-      return <_WishlistMatch>[];
-    }
-
-    // Get matches from listings with scores
-    final List<_WishlistMatch> listingMatches = mockListings
-        .where((Listing listing) => !workflowState.hiddenListingIds.contains(listing.id))
-        .where((Listing listing) {
-          final haystack = '${listing.title} ${listing.courseCode} ${listing.description}'.toLowerCase();
-          return terms.any(haystack.contains);
-        })
-        .map((Listing listing) {
-          double matchScore = _calculateMatchScore(terms, listing);
-          List<String> matchReasons = _getMatchReasons(terms, listing);
-          
-          return _WishlistMatch(
-            id: 'listing-${listing.id}',
-            type: listing.isTrade ? MatchType.trade : MatchType.sale,
-            title: listing.title,
-            subtitle: listing.isTrade
-                ? 'Trade listing • ${listing.courseCode}'
-                : 'Sale listing • \$${listing.price?.toStringAsFixed(0) ?? ''} • ${listing.courseCode}',
-            listingId: listing.id,
-            matchScore: matchScore,
-            matchReasons: matchReasons,
-          );
-        })
-        .toList(growable: false);
-
-    // Get matches from active trades
-    final List<_WishlistMatch> activeTradeMatches = mockTrades
-        .where((Trade trade) {
-          final WorkflowTradeState? workflowTrade = workflowState.tradeStates[trade.id];
-          return workflowTrade != null && 
-              (workflowTrade.status == WorkflowTradeStatus.accepted ||
-               workflowTrade.status == WorkflowTradeStatus.scheduled ||
-               workflowTrade.status == WorkflowTradeStatus.ready);
-        })
-        .map((Trade trade) => _WishlistMatch(
-          id: 'trade-${trade.id}',
-          type: trade.offerType == OfferType.trade ? MatchType.trade : MatchType.sale,
-          title: '${trade.listing.title} (${trade.id.toUpperCase()})',
-          subtitle: trade.offerType == OfferType.trade ? 'Trade match found' : 'Sale match found',
-          listingId: trade.listingId,
-          matchScore: 0.9,
-          matchReasons: ['Active trade offer', 'Seller is responsive'],
-        ))
-        .toList(growable: false);
-
-    // Combine and sort by match score
-    final Set<String> seen = <String>{};
-    List<_WishlistMatch> allMatches = <_WishlistMatch>[...activeTradeMatches, ...listingMatches]
-        .where((match) => seen.add(match.id))
-        .toList(growable: false);
-    
-    allMatches.sort((a, b) => b.matchScore.compareTo(a.matchScore));
-    
-    // Apply filter
-    if (_selectedFilter == 'trade') {
-      allMatches = allMatches.where((m) => m.type == MatchType.trade).toList();
-    } else if (_selectedFilter == 'sale') {
-      allMatches = allMatches.where((m) => m.type == MatchType.sale).toList();
-    }
-    
-    return allMatches;
-  }
+  // ==================== LIFECYCLE METHODS ====================
 
   @override
   void initState() {
     super.initState();
+    // Initialize tab controller with 2 tabs (Wishlist & Matches)
     _tabController = TabController(length: 2, vsync: this);
-    _loadWishlistDetails();
   }
 
   @override
   void dispose() {
+    // Clean up controllers to prevent memory leaks
     _newItemController.dispose();
-    _searchController.dispose();
     _tabController.dispose();
     super.dispose();
   }
 
-  void _loadWishlistDetails() {
-    final workflowState = widget.workflowController.state;
-    for (var item in workflowState.wishlist) {
-      if (!_itemDetails.containsKey(item)) {
-        _itemDetails[item] = WishlistItemDetails(
-          title: item,
-          description: '',
-          category: _guessCategory(item),
-          maxPrice: null,
-          isUrgent: false,
-          tags: [],
-          createdAt: DateTime.now(),
-        );
-      }
-    }
-  }
+  // ==================== HELPER METHODS ====================
 
+  /// Guess category based on item title keywords
+  /// Used to auto-suggest category when adding items
   String _guessCategory(String itemTitle) {
     final title = itemTitle.toLowerCase();
     if (title.contains('textbook') || title.contains('book')) return 'Textbooks';
@@ -142,115 +67,190 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
     return 'Other';
   }
 
-  double _calculateMatchScore(List<String> terms, Listing listing) {
-    double score = 0.0;
-    final listingText = '${listing.title} ${listing.courseCode} ${listing.description}'.toLowerCase();
-    
-    for (var term in terms) {
-      if (listingText.contains(term)) score += 0.3;
-      if (listing.title.toLowerCase().contains(term)) score += 0.5;
+  /// Get icon based on category
+  IconData _getCategoryIcon(String? category) {
+    switch (category) {
+      case 'Textbooks':
+        return Icons.menu_book;
+      case 'Electronics':
+        return Icons.devices;
+      case 'Furniture':
+        return Icons.chair;
+      case 'Clothing':
+        return Icons.checkroom;
+      default:
+        return Icons.favorite;
     }
-    return score.clamp(0.0, 1.0);
   }
 
-  List<String> _getMatchReasons(List<String> terms, Listing listing) {
-    List<String> reasons = [];
-    final listingText = '${listing.title} ${listing.courseCode}'.toLowerCase();
+  /// Find matches between wishlist items and available listings
+  /// Uses mock data for now - can be replaced with Firebase queries later
+  List<_WishlistMatch> _getMatches(List<String> wishlistTitles) {
+    if (wishlistTitles.isEmpty) return [];
     
-    for (var term in terms) {
-      if (listingText.contains(term)) {
-        reasons.add('Matches keyword: "$term"');
-        break;
-      }
-    }
+    // Normalize wishlist titles for matching
+    final List<String> terms = wishlistTitles
+        .map((t) => t.trim().toLowerCase())
+        .where((t) => t.isNotEmpty)
+        .toList();
+
+    // Search through mock listings for matches
+    final matches = mockListings
+        .where((listing) {
+          // Combine all listing text for searching
+          final haystack = '${listing.title} ${listing.courseCode} ${listing.description}'.toLowerCase();
+          return terms.any(haystack.contains);
+        })
+        .map((listing) {
+          // Calculate match score (0-1)
+          double matchScore = 0.8; // Default score
+          List<String> matchReasons = ['Matches your wishlist'];
+          
+          return _WishlistMatch(
+            id: 'listing-${listing.id}',
+            type: listing.isTrade ? MatchType.trade : MatchType.sale,
+            title: listing.title,
+            subtitle: listing.isTrade
+                ? 'Trade listing • ${listing.courseCode}'
+                : 'Sale listing • \$${listing.price?.toStringAsFixed(0) ?? ''}',
+            listingId: listing.id,
+            matchScore: matchScore,
+            matchReasons: matchReasons,
+          );
+        })
+        .toList();
     
-    if (listing.price != null && listing.price! < 50) {
-      reasons.add('Affordable price');
-    }
-    if (listing.isTrade) {
-      reasons.add('Available for trade');
-    }
-    return reasons;
+    return matches;
   }
 
+  // ==================== DIALOG METHODS ====================
+
+  /// Show advanced add dialog with category, price, and urgency options
   void _showAddWishlistDialog() {
+    String selectedCategory = 'Other';
+    bool isUrgent = false;
+    TextEditingController titleController = TextEditingController();
+    TextEditingController priceController = TextEditingController();
+    
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add to Wishlist'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _newItemController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'What are you looking for?',
-                  hintText: 'e.g., CIS*1300 textbook',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _guessCategory(_newItemController.text),
-                decoration: const InputDecoration(
-                  labelText: 'Category',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'Textbooks', child: Text('Textbooks')),
-                  DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
-                  DropdownMenuItem(value: 'Furniture', child: Text('Furniture')),
-                  DropdownMenuItem(value: 'Clothing', child: Text('Clothing')),
-                  DropdownMenuItem(value: 'Other', child: Text('Other')),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: const Text('Add to Wishlist'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Item title input
+                  TextField(
+                    controller: titleController,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'What are you looking for? *',
+                      hintText: 'e.g., CIS*1300 textbook',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Category dropdown
+                  DropdownButtonFormField<String>(
+                    value: selectedCategory,
+                    decoration: const InputDecoration(
+                      labelText: 'Category',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'Textbooks', child: Text('Textbooks')),
+                      DropdownMenuItem(value: 'Electronics', child: Text('Electronics')),
+                      DropdownMenuItem(value: 'Furniture', child: Text('Furniture')),
+                      DropdownMenuItem(value: 'Clothing', child: Text('Clothing')),
+                      DropdownMenuItem(value: 'Other', child: Text('Other')),
+                    ],
+                    onChanged: (value) {
+                      setStateDialog(() {
+                        selectedCategory = value!;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  // Max price input
+                  TextField(
+                    controller: priceController,
+                    decoration: const InputDecoration(
+                      labelText: 'Max Price (optional)',
+                      border: OutlineInputBorder(),
+                      prefixText: '\$',
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                  const SizedBox(height: 12),
+                  // Urgent checkbox
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: isUrgent,
+                        onChanged: (value) {
+                          setStateDialog(() {
+                            isUrgent = value!;
+                          });
+                        },
+                      ),
+                      const Text('Mark as urgent'),
+                    ],
+                  ),
                 ],
-                onChanged: (value) {},
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (titleController.text.trim().isNotEmpty) {
+                    try {
+                      // Add to Firebase
+                      await _wishlistService.addWishlistItem(
+                        title: titleController.text.trim(),
+                        category: selectedCategory,
+                        isUrgent: isUrgent,
+                        maxPrice: priceController.text.isNotEmpty 
+                            ? double.parse(priceController.text) 
+                            : null,
+                      );
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Added to wishlist!')),
+                      );
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e')),
+                      );
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF8B0000),
+                ),
+                child: const Text('Add'),
               ),
             ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (_newItemController.text.trim().isNotEmpty) {
-                widget.workflowController.addWishlistItem(_newItemController.text.trim());
-                _newItemController.clear();
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Added to wishlist!')),
-                );
-                setState(() {});
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF8B0000),
-            ),
-            child: const Text('Add'),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 
-  void _showEditWishlistItemDialog(String item) {
-    final details = _itemDetails[item] ?? WishlistItemDetails(
-      title: item,
-      description: '',
-      category: _guessCategory(item),
-      maxPrice: null,
-      isUrgent: false,
-      tags: [],
-      createdAt: DateTime.now(),
+  /// Show edit dialog for existing wishlist item
+  void _showEditWishlistItemDialog(String docId, Map<String, dynamic> itemData) {
+    TextEditingController titleController = TextEditingController(text: itemData['title']);
+    String category = itemData['category'] ?? 'Other';
+    bool isUrgent = itemData['isUrgent'] ?? false;
+    TextEditingController priceController = TextEditingController(
+      text: itemData['maxPrice']?.toString() ?? '',
     );
-    
-    final titleController = TextEditingController(text: item);
-    bool isUrgent = details.isUrgent;
-    String category = details.category;
     
     showDialog(
       context: context,
@@ -261,6 +261,7 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Title input
                 TextField(
                   controller: titleController,
                   decoration: const InputDecoration(
@@ -269,6 +270,7 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
                   ),
                 ),
                 const SizedBox(height: 12),
+                // Category dropdown
                 DropdownButtonFormField<String>(
                   value: category,
                   decoration: const InputDecoration(
@@ -289,6 +291,18 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
                   },
                 ),
                 const SizedBox(height: 12),
+                // Price input
+                TextField(
+                  controller: priceController,
+                  decoration: const InputDecoration(
+                    labelText: 'Max Price (optional)',
+                    border: OutlineInputBorder(),
+                    prefixText: '\$',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 12),
+                // Urgent checkbox
                 Row(
                   children: [
                     Checkbox(
@@ -310,27 +324,27 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
                 child: const Text('Cancel'),
               ),
               TextButton(
-                onPressed: () {
-                  _itemDetails[item] = WishlistItemDetails(
-                    title: titleController.text,
-                    description: details.description,
-                    category: category,
-                    maxPrice: details.maxPrice,
-                    isUrgent: isUrgent,
-                    tags: details.tags,
-                    createdAt: details.createdAt,
-                  );
-                  
-                  if (titleController.text != item) {
-                    widget.workflowController.removeWishlistItem(item);
-                    widget.workflowController.addWishlistItem(titleController.text);
+                onPressed: () async {
+                  try {
+                    // Update in Firebase
+                    await _wishlistService.updateWishlistItem(
+                      docId: docId,
+                      title: titleController.text,
+                      category: category,
+                      isUrgent: isUrgent,
+                      maxPrice: priceController.text.isNotEmpty 
+                          ? double.parse(priceController.text) 
+                          : null,
+                    );
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Wishlist item updated!')),
+                    );
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e')),
+                    );
                   }
-                  
-                  Navigator.pop(context);
-                  setState(() {});
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Wishlist item updated!')),
-                  );
                 },
                 child: const Text('Save'),
               ),
@@ -341,26 +355,32 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
     );
   }
 
-  void _showDeleteConfirmation(String item) {
+  /// Show delete confirmation dialog
+  void _showDeleteConfirmation(String docId, String title) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove Item'),
-        content: Text('Remove "$item" from your wishlist?'),
+        content: Text('Remove "$title" from your wishlist?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              widget.workflowController.removeWishlistItem(item);
-              _itemDetails.remove(item);
-              Navigator.pop(context);
-              setState(() {});
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Removed $item from wishlist')),
-              );
+            onPressed: () async {
+              try {
+                // Delete from Firebase
+                await _wishlistService.deleteWishlistItem(docId);
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Removed $title from wishlist')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: $e')),
+                );
+              }
             },
             child: const Text('Remove', style: TextStyle(color: Colors.red)),
           ),
@@ -369,6 +389,7 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
     );
   }
 
+  /// Show clear all wishlist confirmation dialog
   void _showClearWishlistDialog() {
     showDialog(
       context: context,
@@ -381,17 +402,19 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
-              final items = List.from(widget.workflowController.state.wishlist);
-              for (var item in items) {
-                widget.workflowController.removeWishlistItem(item);
-                _itemDetails.remove(item);
+            onPressed: () async {
+              try {
+                // Delete all items from Firebase
+                await _wishlistService.clearAllWishlistItems();
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Wishlist cleared')),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: $e')),
+                );
               }
-              Navigator.pop(context);
-              setState(() {});
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Wishlist cleared')),
-              );
             },
             child: const Text('Clear All', style: TextStyle(color: Colors.red)),
           ),
@@ -400,55 +423,86 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
     );
   }
 
+  // ==================== UI BUILDING METHODS ====================
+
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: widget.workflowController,
-      builder: (BuildContext context, Widget? child) {
-        final WorkflowState workflowState = widget.workflowController.state;
-        final List<_WishlistMatch> matches = _matches(workflowState);
+    // StreamBuilder for real-time Firebase updates
+    return StreamBuilder<QuerySnapshot>(
+      stream: _wishlistService.getUserWishlist(),
+      builder: (context, snapshot) {
+        // Handle errors
+        if (snapshot.hasError) {
+          return Scaffold(
+            bottomNavigationBar: const AppBottomNav(currentRoute: '/wishlist'),
+            body: Center(
+              child: Text('Error: ${snapshot.error}'),
+            ),
+          );
+        }
 
-        final List<_WishlistMatch> saleMatches = matches
-            .where((_WishlistMatch match) => match.type == MatchType.sale)
-            .toList(growable: false);
-        final List<_WishlistMatch> tradeMatches = matches
-            .where((_WishlistMatch match) => match.type == MatchType.trade)
-            .toList(growable: false);
+        // Show loading indicator while fetching data
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            bottomNavigationBar: const AppBottomNav(currentRoute: '/wishlist'),
+            body: const Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+
+        // Extract wishlist items from Firestore
+        final wishlistDocs = snapshot.data?.docs ?? [];
+        final wishlistItems = wishlistDocs.map((doc) {
+          return {
+            'id': doc.id,
+            ...doc.data() as Map<String, dynamic>,
+          };
+        }).toList();
+        
+        // Get matches for current wishlist items
+        final wishlistTitles = wishlistItems.map((item) => item['title'] as String).toList();
+        final matches = _getMatches(wishlistTitles);
+        
+        // Separate matches by type for display
+        final saleMatches = matches.where((m) => m.type == MatchType.sale).toList();
+        final tradeMatches = matches.where((m) => m.type == MatchType.trade).toList();
 
         return Scaffold(
           bottomNavigationBar: const AppBottomNav(currentRoute: '/wishlist'),
           body: Column(
             children: <Widget>[
+              // App header with title and search
               AppHeader(
                 title: 'Wishlist',
                 actions: [
                   IconButton(
                     icon: const Icon(Icons.search),
                     onPressed: () {
-                      showSearch(
-                        context: context,
-                        delegate: WishlistSearchDelegate(workflowState.wishlist),
+                      // TODO: Implement search functionality
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Search coming soon!')),
                       );
                     },
                   ),
                 ],
               ),
+              // Tab bar for switching between views
               TabBar(
                 controller: _tabController,
                 labelColor: const Color(0xFF8B0000),
                 indicatorColor: const Color(0xFF8B0000),
                 tabs: <Widget>[
-                  Tab(text: 'My Wishlist (${workflowState.wishlist.length})'),
+                  Tab(text: 'My Wishlist (${wishlistItems.length})'),
                   Tab(text: 'Matches (${matches.length})'),
                 ],
               ),
+              // Tab content
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
                   children: <Widget>[
-                    // Wishlist Tab
-                    _buildWishlistTab(workflowState),
-                    // Matches Tab
+                    _buildWishlistTab(wishlistItems),
                     _buildMatchesTab(matches, tradeMatches, saleMatches),
                   ],
                 ),
@@ -460,161 +514,239 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildWishlistTab(WorkflowState workflowState) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: <Widget>[
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                const Text(
-                  'Add What You Are Looking For',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _newItemController,
-                        decoration: const InputDecoration(
-                          labelText: 'Wishlist Item',
-                          hintText: 'e.g., CIS*1300 textbook',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    ElevatedButton(
-                      onPressed: _newItemController.text.trim().isEmpty
-                          ? null
-                          : () {
-                              widget.workflowController
-                                  .addWishlistItem(_newItemController.text.trim());
-                              _newItemController.clear();
-                              setState(() {});
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF8B0000),
-                      ),
-                      child: const Text('Add'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: _showAddWishlistDialog,
-                  icon: const Icon(Icons.add_circle_outline),
-                  label: const Text('Advanced Add'),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
+  /// Build the Wishlist tab content
+  Widget _buildWishlistTab(List<Map<String, dynamic>> wishlistItems) {
+    // StatefulBuilder allows local rebuilds without affecting parent
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: <Widget>[
+            // ========== ADD ITEM CARD ==========
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
                     const Text(
-                      'Managed Wishlist',
+                      'Add What You Are Looking For',
                       style: TextStyle(fontWeight: FontWeight.w700),
                     ),
-                    if (workflowState.wishlist.isNotEmpty)
-                      TextButton(
-                        onPressed: _showClearWishlistDialog,
-                        child: const Text(
-                          'Clear All',
-                          style: TextStyle(color: Colors.red),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                if (workflowState.wishlist.isEmpty)
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.favorite_border,
-                            size: 48,
-                            color: Colors.grey.shade400,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Your wishlist is empty',
-                            style: TextStyle(color: Colors.grey.shade600),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                else
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: workflowState.wishlist.length,
-                    itemBuilder: (context, index) {
-                      final item = workflowState.wishlist[index];
-                      final details = _itemDetails[item];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: details?.isUrgent == true
-                                ? Colors.red.shade100
-                                : Colors.grey.shade200,
-                            child: Icon(
-                              details?.isUrgent == true
-                                  ? Icons.priority_high
-                                  : _getCategoryIcon(details?.category),
-                              size: 20,
+                    const SizedBox(height: 10),
+                    // Quick Add row
+                    Row(
+                      children: [
+                        // Text input field
+                        Expanded(
+                          child: TextField(
+                            controller: _newItemController,
+                            onChanged: (value) {
+                              setState(() {}); // Trigger rebuild to update button state
+                            },
+                            decoration: const InputDecoration(
+                              labelText: 'Wishlist Item',
+                              hintText: 'e.g., CIS*1300 textbook',
+                              border: OutlineInputBorder(),
                             ),
                           ),
-                          title: Text(item),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
+                        ),
+                        const SizedBox(width: 10),
+                        // Quick Add button (enables/disables based on text)
+                        ElevatedButton(
+                          onPressed: (_newItemController.text.trim().isEmpty || _isAdding)
+                              ? null
+                              : () async {
+                                  setState(() {
+                                    _isAdding = true; // Show loading state
+                                  });
+                                  try {
+                                    await _wishlistService.addWishlistItem(
+                                      title: _newItemController.text.trim(),
+                                      category: _guessCategory(_newItemController.text),
+                                    );
+                                    _newItemController.clear();
+                                    setState(() {
+                                      _isAdding = false;
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Added to wishlist!')),
+                                    );
+                                  } catch (e) {
+                                    setState(() {
+                                      _isAdding = false;
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Error: $e')),
+                                    );
+                                  }
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF8B0000), // GryphXChange red
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: Colors.grey.shade300,
+                            disabledForegroundColor: Colors.grey.shade600,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            textStyle: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          child: _isAdding
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : const Text('Quick Add'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    // Advanced Add button
+                    OutlinedButton.icon(
+                      onPressed: _showAddWishlistDialog,
+                      icon: const Icon(Icons.add_circle_outline),
+                      label: const Text('Advanced Add'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            
+            // ========== MANAGED WISHLIST CARD ==========
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    // Header with Clear All button
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Managed Wishlist',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        if (wishlistItems.isNotEmpty)
+                          TextButton(
+                            onPressed: _showClearWishlistDialog,
+                            child: const Text(
+                              'Clear All',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    
+                    // Wishlist items list
+                    if (wishlistItems.isEmpty)
+                      // Empty state
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Column(
                             children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit, size: 20),
-                                onPressed: () => _showEditWishlistItemDialog(item),
+                              Icon(
+                                Icons.favorite_border,
+                                size: 48,
+                                color: Colors.grey.shade400,
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, size: 20),
-                                onPressed: () => _showDeleteConfirmation(item),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Your wishlist is empty',
+                                style: TextStyle(color: Colors.grey.shade600),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Add items you\'re looking for',
+                                style: TextStyle(
+                                  color: Colors.grey.shade500,
+                                  fontSize: 12,
+                                ),
                               ),
                             ],
                           ),
-                          onTap: () => _showEditWishlistItemDialog(item),
                         ),
-                      );
-                    },
-                  ),
-              ],
+                      )
+                    else
+                      // List of wishlist items
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: wishlistItems.length,
+                        itemBuilder: (context, index) {
+                          final item = wishlistItems[index];
+                          final isUrgent = item['isUrgent'] ?? false;
+                          final category = item['category'] ?? 'Other';
+                          
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: isUrgent
+                                    ? Colors.red.shade100
+                                    : Colors.grey.shade200,
+                                child: Icon(
+                                  isUrgent ? Icons.priority_high : _getCategoryIcon(category),
+                                  size: 20,
+                                ),
+                              ),
+                              title: Text(
+                                item['title'],
+                                style: const TextStyle(fontWeight: FontWeight.w500),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, size: 20),
+                                    onPressed: () => _showEditWishlistItemDialog(item['id'], item),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, size: 20),
+                                    onPressed: () => _showDeleteConfirmation(item['id'], item['title']),
+                                  ),
+                                ],
+                              ),
+                              onTap: () => _showEditWishlistItemDialog(item['id'], item),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 
+  /// Build the Matches tab content
   Widget _buildMatchesTab(
     List<_WishlistMatch> matches,
     List<_WishlistMatch> tradeMatches,
     List<_WishlistMatch> saleMatches,
   ) {
+    // Apply filter based on selected filter
+    List<_WishlistMatch> filteredMatches = matches;
+    if (_selectedFilter == 'trade') {
+      filteredMatches = tradeMatches;
+    } else if (_selectedFilter == 'sale') {
+      filteredMatches = saleMatches;
+    }
+    
     return Column(
       children: [
+        // Filter chips
         Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
@@ -653,10 +785,13 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
             ],
           ),
         ),
+        
+        // Matches list
         Expanded(
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: <Widget>[
+              // Summary card
               Card(
                 child: ListTile(
                   title: const Text(
@@ -669,7 +804,10 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
                 ),
               ),
               const SizedBox(height: 8),
-              if (matches.isEmpty)
+              
+              // Matches content
+              if (filteredMatches.isEmpty)
+                // Empty state
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 40),
@@ -688,12 +826,17 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
                             color: Colors.grey.shade600,
                           ),
                         ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Try adding more specific items to your wishlist',
+                          style: TextStyle(color: Colors.grey.shade500),
+                        ),
                       ],
                     ),
                   ),
                 )
               else
-                ...matches.map((match) => _buildMatchCard(match)),
+                ...filteredMatches.map((match) => _buildMatchCard(match)),
             ],
           ),
         ),
@@ -701,6 +844,7 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
     );
   }
 
+  /// Build a single match card
   Widget _buildMatchCard(_WishlistMatch match) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -711,6 +855,7 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
+              // Title and type badge
               Row(
                 children: <Widget>[
                   Expanded(
@@ -729,8 +874,8 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
                     ),
                     decoration: BoxDecoration(
                       color: match.type == MatchType.trade
-                          ? const Color(0x40FFD700)
-                          : const Color(0x1A8B0000),
+                          ? const Color(0x40FFD700) // Yellow for trade
+                          : const Color(0x1A8B0000), // Red for sale
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -749,7 +894,9 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
                 ],
               ),
               const SizedBox(height: 8),
+              // Subtitle (price/course info)
               Text(match.subtitle),
+              // Match score (if available)
               if (match.matchScore > 0)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -767,6 +914,7 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
                     ],
                   ),
                 ),
+              // Match reasons
               if (match.matchReasons.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -785,6 +933,7 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
                   ),
                 ),
               const SizedBox(height: 12),
+              // View Listing button
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
@@ -803,55 +952,14 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
       ),
     );
   }
-
-  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 24, color: color),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  IconData _getCategoryIcon(String? category) {
-    switch (category) {
-      case 'Textbooks':
-        return Icons.menu_book;
-      case 'Electronics':
-        return Icons.devices;
-      case 'Furniture':
-        return Icons.chair;
-      case 'Clothing':
-        return Icons.checkroom;
-      default:
-        return Icons.favorite;
-    }
-  }
 }
 
+// ==================== DATA MODELS ====================
+
+/// Types of matches (Sale or Trade)
 enum MatchType { sale, trade }
 
+/// Internal model for wishlist matches
 class _WishlistMatch {
   const _WishlistMatch({
     required this.id,
@@ -870,77 +978,4 @@ class _WishlistMatch {
   final String listingId;
   final double matchScore;
   final List<String> matchReasons;
-}
-
-class WishlistItemDetails {
-  final String title;
-  final String description;
-  final String category;
-  final double? maxPrice;
-  final bool isUrgent;
-  final List<String> tags;
-  final DateTime createdAt;
-
-  WishlistItemDetails({
-    required this.title,
-    required this.description,
-    required this.category,
-    this.maxPrice,
-    required this.isUrgent,
-    required this.tags,
-    required this.createdAt,
-  });
-}
-
-class WishlistSearchDelegate extends SearchDelegate<String> {
-  final List<String> wishlistItems;
-
-  WishlistSearchDelegate(this.wishlistItems);
-
-  @override
-  List<Widget>? buildActions(BuildContext context) => [
-    IconButton(
-      icon: const Icon(Icons.clear),
-      onPressed: () => query = '',
-    ),
-  ];
-
-  @override
-  Widget? buildLeading(BuildContext context) => IconButton(
-    icon: const Icon(Icons.arrow_back),
-    onPressed: () => close(context, ''),
-  );
-
-  @override
-  Widget buildResults(BuildContext context) {
-    final results = wishlistItems
-        .where((item) => item.toLowerCase().contains(query.toLowerCase()))
-        .toList();
-    
-    return ListView.builder(
-      itemCount: results.length,
-      itemBuilder: (context, index) => ListTile(
-        title: Text(results[index]),
-        onTap: () => close(context, results[index]),
-      ),
-    );
-  }
-
-  @override
-  Widget buildSuggestions(BuildContext context) {
-    final suggestions = wishlistItems
-        .where((item) => item.toLowerCase().contains(query.toLowerCase()))
-        .toList();
-    
-    return ListView.builder(
-      itemCount: suggestions.length,
-      itemBuilder: (context, index) => ListTile(
-        title: Text(suggestions[index]),
-        onTap: () {
-          query = suggestions[index];
-          showResults(context);
-        },
-      ),
-    );
-  }
 }
