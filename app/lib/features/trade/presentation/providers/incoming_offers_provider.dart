@@ -60,8 +60,14 @@ final incomingOffersProvider = StreamProvider<List<IncomingOffer>>((ref) {
 
             final Map<String, dynamic> userData =
                 userDoc.data() ?? <String, dynamic>{};
-            final String name = (userData['name'] as String?)?.trim() ?? '';
-            buyerNamesById[buyerId] = name.isNotEmpty ? name : buyerId;
+            final String name = ((userData['name'] as String?) ??
+                    (userData['displayName'] as String?) ??
+                    (userData['fullName'] as String?) ??
+                    (userData['username'] as String?) ??
+                    '')
+                .trim();
+            buyerNamesById[buyerId] =
+                name.isNotEmpty ? name : 'Unknown buyer';
           }),
         );
 
@@ -95,10 +101,9 @@ final incomingOffersProvider = StreamProvider<List<IncomingOffer>>((ref) {
               // Keep cards readable if listing doc is deleted/missing title.
               listingTitle:
                   (listingData['title'] as String?) ?? 'Untitled Listing',
-              buyerId: (data['buyerId'] as String?) ?? 'Unknown buyer',
+              buyerId: (data['buyerId'] as String?) ?? '',
               buyerName:
                 buyerNamesById[(data['buyerId'] as String?) ?? ''] ??
-                (data['buyerId'] as String?) ??
                 'Unknown buyer',
               // UI relies on lowercase status/type strings for simple comparisons.
               offerType: ((data['offerType'] as String?) ?? 'cash').toLowerCase(),

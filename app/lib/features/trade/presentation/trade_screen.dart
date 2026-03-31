@@ -456,7 +456,7 @@ class _SentOfferCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Seller: ${offer.sellerId}',
+              'Seller: ${offer.sellerName}',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 2),

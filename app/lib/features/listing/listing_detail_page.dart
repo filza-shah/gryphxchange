@@ -30,6 +30,8 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
   String _selectedTradeItem = '';
   String _meetupLocation = '';
   bool _isSubmittingOffer = false;
+  // Cache user names while rendering cards to avoid repeated user lookups.
+  final Map<String, String> _userNameCache = <String, String>{};
   // Track per-offer mutations so buttons can show local loading states.
   String _acceptingOfferId = '';
   String _rejectingOfferId = '';
@@ -78,6 +80,33 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
     // Cash offers require a positive number before enabling submit.
     final double? amount = double.tryParse(_cashAmountController.text.trim());
     return amount != null && amount > 0;
+  }
+
+  Future<String> _resolveUserName(String userId) async {
+    if (userId.isEmpty || userId == 'unknown') {
+      return 'Unknown buyer';
+    }
+
+    final String? cached = _userNameCache[userId];
+    if (cached != null && cached.isNotEmpty) {
+      return cached;
+    }
+
+    final DocumentSnapshot<Map<String, dynamic>> userDoc =
+        await FirebaseFirestore.instance.collection('users').doc(userId).get();
+    final Map<String, dynamic> userData =
+        userDoc.data() ?? <String, dynamic>{};
+
+    final String name = ((userData['name'] as String?) ??
+            (userData['displayName'] as String?) ??
+            (userData['fullName'] as String?) ??
+            (userData['username'] as String?) ??
+            '')
+        .trim();
+
+    final String resolved = name.isEmpty ? 'Unknown buyer' : name;
+    _userNameCache[userId] = resolved;
+    return resolved;
   }
 
   Future<void> _submitOffer(Listing listing) async {
@@ -480,9 +509,16 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
           Row(
             children: <Widget>[
               Expanded(
-                child: Text(
-                  'Buyer: $buyerId',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+                child: FutureBuilder<String>(
+                  future: _resolveUserName(buyerId),
+                  builder: (context, snapshot) {
+                    final String buyerName =
+                        snapshot.data ?? 'Loading buyer...';
+                    return Text(
+                      'Buyer: $buyerName',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    );
+                  },
                 ),
               ),
               Chip(

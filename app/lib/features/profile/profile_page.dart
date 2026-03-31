@@ -444,31 +444,36 @@ class ProfilePage extends ConsumerWidget {
                                             '/listing/${listing.id}',
                                           );
                                         },
-                                        child: Row(
-                                          children: <Widget>[
-                                            ClipRRect(
-                                              borderRadius:
-                                                  const BorderRadius.only(
-                                                    topLeft: Radius.circular(
-                                                      12,
-                                                    ),
-                                                    bottomLeft: Radius.circular(
-                                                      12,
-                                                    ),
+                                        child: IntrinsicHeight(
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: <Widget>[
+                                              SizedBox(
+                                                width: 92,
+                                                child: ClipRRect(
+                                                  borderRadius:
+                                                      const BorderRadius.only(
+                                                        topLeft:
+                                                            Radius.circular(12),
+                                                        bottomLeft:
+                                                            Radius.circular(12),
+                                                      ),
+                                                  child: _ProfileListingThumbnail(
+                                                    imagePathOrUrl:
+                                                        previewImage,
                                                   ),
-                                              child: _ProfileListingThumbnail(
-                                                imagePathOrUrl: previewImage,
-                                              ),
-                                            ),
-                                            Expanded(
-                                              child: Padding(
-                                                padding: const EdgeInsets.all(
-                                                  12,
                                                 ),
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: <Widget>[
+                                              ),
+                                              Expanded(
+                                                child: Padding(
+                                                  padding:
+                                                      const EdgeInsets.all(12),
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: <Widget>[
                                                     // quick seller controls live right beside each card,
                                                     // so managing your own listings stays dead simple.
                                                     Row(
@@ -559,11 +564,12 @@ class ProfilePage extends ConsumerWidget {
                                                         fontSize: 20,
                                                       ),
                                                     ),
-                                                  ],
+                                                    ],
+                                                  ),
                                                 ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     );
@@ -715,26 +721,26 @@ class _ProfileListingThumbnail extends StatelessWidget {
           return _thumbnailFallback(context);
         }
 
-        return Image.network(
-          resolvedUrl,
-          width: 80,
-          height: 80,
-          fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => _thumbnailFallback(context),
+        return SizedBox.expand(
+          child: Image.network(
+            resolvedUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => _thumbnailFallback(context),
+          ),
         );
       },
     );
   }
 
   Widget _thumbnailFallback(BuildContext context) {
-    return Container(
-      width: 80,
-      height: 80,
-      color: Colors.grey.shade200,
-      alignment: Alignment.center,
-      child: Icon(
-        Icons.image_not_supported_outlined,
-        color: Colors.grey.shade600,
+    return SizedBox.expand(
+      child: Container(
+        color: Colors.grey.shade200,
+        alignment: Alignment.center,
+        child: Icon(
+          Icons.image_not_supported_outlined,
+          color: Colors.grey.shade600,
+        ),
       ),
     );
   }
