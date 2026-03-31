@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 import '../../core/providers/auth_provider.dart';
 import '../../core/widgets/app_bottom_nav.dart';
@@ -120,14 +121,13 @@ class ProfilePage extends ConsumerWidget {
     BuildContext context,
     Listing listing,
   ) async {
-    // soft delete keeps old offer/trade references from getting weird later on.
     final bool? shouldDelete = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text('Delete Listing?'),
           content: Text(
-            'This will hide "${listing.title}" from active listings. You can treat it like a safe remove for now.',
+            'This will permanently remove "${listing.title}" if there are no linked offers or trades.',
           ),
           actions: <Widget>[
             TextButton(
@@ -151,20 +151,49 @@ class ProfilePage extends ConsumerWidget {
     }
 
     try {
-      await FirebaseFirestore.instance
-          .collection('listings')
-          .doc(listing.id)
-          .update(<String, dynamic>{
-            'status': 'inactive',
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+      final FirebaseFirestore firestore = FirebaseFirestore.instance;
+      final QuerySnapshot<Map<String, dynamic>> relatedOffers = await firestore
+          .collection('offers')
+          .where('listingId', isEqualTo: listing.id)
+          .limit(1)
+          .get();
+
+      // keep this guard in place so we do not orphan offer/trade records.
+      if (relatedOffers.docs.isNotEmpty) {
+        if (!context.mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'This listing already has related offers or trades, so it cannot be permanently deleted.',
+            ),
+          ),
+        );
+        return;
+      }
+
+      // lil cleanup pass: only Firebase Storage urls can be deleted here.
+      for (final String imageUrl in listing.images) {
+        if (!imageUrl.contains('firebasestorage.googleapis.com')) {
+          continue;
+        }
+
+        try {
+          await FirebaseStorage.instance.refFromURL(imageUrl).delete();
+        } catch (_) {
+          // if image cleanup fails, we still want the doc delete to go through.
+        }
+      }
+
+      await firestore.collection('listings').doc(listing.id).delete();
 
       if (!context.mounted) {
         return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Listing removed from active listings.')),
+        const SnackBar(content: Text('Listing deleted successfully.')),
       );
     } catch (_) {
       if (!context.mounted) {
