@@ -724,6 +724,28 @@ class _CreateListingPageState extends State<CreateListingPage> {
         ),
       );
       context.go(_isEditing ? '/profile' : '/home');
+    } on FirebaseException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      final String lowerMessage = (error.message ?? '').toLowerCase();
+      final String message;
+      if (error.plugin == 'firebase_storage' &&
+          (lowerMessage.contains('app check') ||
+              lowerMessage.contains('placeholder token'))) {
+        message =
+            'Image upload is blocked by Firebase App Check. Verify App Check is enabled in the app and that this device is allowed.';
+      } else if (error.plugin == 'firebase_storage' &&
+          (error.code == 'unauthorized' || lowerMessage.contains('permission'))) {
+        message =
+            'Image upload was denied by storage rules. Please check your permissions and try again.';
+      } else {
+        message =
+            'Unable to upload the listing image right now (${error.code}). Please try again.';
+      }
+      setState(() {
+        _submitError = message;
+      });
     } catch (_) {
       if (!mounted) {
         return;

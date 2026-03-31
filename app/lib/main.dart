@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 
 import 'core/providers/workflow_provider.dart';
 import 'core/router/app_router.dart';
@@ -7,6 +8,7 @@ import 'services/workflow/workflow_controller.dart';
 
 // Firebase imports
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'firebase_options.dart';
 
 // custom color constants for app theme
@@ -21,6 +23,17 @@ Future<void> main() async {
   // Initialize Firebase with current platform options
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // App Check must be active before any protected Firebase services (like
+  // Storage) are called; otherwise the SDK sends placeholder tokens.
+  await FirebaseAppCheck.instance.activate(
+    androidProvider: kReleaseMode
+        ? AndroidProvider.playIntegrity
+        : AndroidProvider.debug,
+    appleProvider: kReleaseMode
+        ? AppleProvider.appAttestWithDeviceCheckFallback
+        : AppleProvider.debug,
   );
 
   final WorkflowController workflowController = WorkflowController();
