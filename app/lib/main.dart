@@ -21,20 +21,20 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Firebase with current platform options
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // App Check must be active before any protected Firebase services (like
-  // Storage) are called; otherwise the SDK sends placeholder tokens.
-  await FirebaseAppCheck.instance.activate(
-    androidProvider: kReleaseMode
-        ? AndroidProvider.playIntegrity
-        : AndroidProvider.debug,
-    appleProvider: kReleaseMode
-        ? AppleProvider.appAttestWithDeviceCheckFallback
-        : AppleProvider.debug,
-  );
+  // App Check is enabled on mobile platforms. Web requires its own reCAPTCHA
+  // provider configuration, so we skip it here until a site key is set up.
+  if (!kIsWeb) {
+    await FirebaseAppCheck.instance.activate(
+      androidProvider: kReleaseMode
+          ? AndroidProvider.playIntegrity
+          : AndroidProvider.debug,
+      appleProvider: kReleaseMode
+          ? AppleProvider.appAttestWithDeviceCheckFallback
+          : AppleProvider.debug,
+    );
+  }
 
   final WorkflowController workflowController = WorkflowController();
   await workflowController.init();
