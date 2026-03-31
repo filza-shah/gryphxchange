@@ -67,11 +67,25 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
   }
 
   Future<void> _markBuyerScannedSeller() async {
-    await _offerRef.set(<String, dynamic>{
-      'verificationPhase': 'seller_scans_buyer',
-      'buyerScannedSellerQrAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    final FirebaseFirestore firestore = FirebaseFirestore.instance;
+
+    await firestore.runTransaction((transaction) async {
+      final DocumentSnapshot<Map<String, dynamic>> snapshot =
+          await transaction.get(_offerRef);
+      final Map<String, dynamic> offer = snapshot.data() ?? <String, dynamic>{};
+      final String phase =
+          ((offer['verificationPhase'] as String?) ?? 'buyer_scans_seller');
+
+      if (phase != 'buyer_scans_seller') {
+        return;
+      }
+
+      transaction.set(_offerRef, <String, dynamic>{
+        'verificationPhase': 'seller_scans_buyer',
+        'buyerScannedSellerQrAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
   }
 
   Future<void> _markSellerScannedBuyer() async {
@@ -83,6 +97,13 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
       final offerSnapshot = await transaction.get(_offerRef);
       final Map<String, dynamic> offer =
           offerSnapshot.data() ?? <String, dynamic>{};
+      final String phase =
+          ((offer['verificationPhase'] as String?) ?? 'buyer_scans_seller');
+
+      if (phase != 'seller_scans_buyer') {
+        return;
+      }
+
       final String sellerId = (offer['sellerId'] as String?) ?? '';
       final String buyerId = (offer['buyerId'] as String?) ?? '';
 
@@ -287,9 +308,6 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
             'Buyer scans first. Use your camera to scan the seller\'s QR code.',
         expectedQrData: sellerCode,
         onScanned: (_) => _markBuyerScannedSeller(),
-        onSkip: () {
-          _markBuyerScannedSeller();
-        },
       );
     }
 
@@ -310,17 +328,6 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
           'Seller scans second. Use your camera to scan the buyer\'s QR code.',
       expectedQrData: buyerCode,
       onScanned: (_) async {
-        await _markSellerScannedBuyer();
-
-        final workflowController = ref.read(workflowControllerProvider);
-        workflowController.completeTransaction(
-          widget.trade.id,
-          widget.trade.listingId,
-          widget.trade.mode,
-        );
-        ref.invalidate(displayTradesProvider);
-      },
-      onSkip: () async {
         await _markSellerScannedBuyer();
 
         final workflowController = ref.read(workflowControllerProvider);

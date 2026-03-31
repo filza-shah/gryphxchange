@@ -6,7 +6,6 @@ class ScanVerifyStep extends StatefulWidget {
   final String description;
   final String expectedQrData;
   final Future<void> Function(String scannedData) onScanned;
-  final VoidCallback onSkip;
 
   const ScanVerifyStep({
     super.key,
@@ -14,7 +13,6 @@ class ScanVerifyStep extends StatefulWidget {
     required this.description,
     required this.expectedQrData,
     required this.onScanned,
-    required this.onSkip,
   });
 
   @override
@@ -94,7 +92,21 @@ class _ScanVerifyStepState extends State<ScanVerifyStep> {
     });
 
     await _scannerController.stop();
-    await widget.onScanned(scannedData);
+
+    try {
+      await widget.onScanned(scannedData);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      await _scannerController.start();
+      setState(() {
+        _isProcessingScan = false;
+        _statusMessage = 'Verification failed. Keep the camera on the other device QR and try again.';
+      });
+      return;
+    }
 
     if (!mounted) {
       return;
@@ -117,7 +129,6 @@ class _ScanVerifyStepState extends State<ScanVerifyStep> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final red = const Color(0xFF8B0000);
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -245,17 +256,6 @@ class _ScanVerifyStepState extends State<ScanVerifyStep> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: _isProcessingScan || _scanVerified
-                    ? null
-                    : widget.onSkip,
-                icon: const Icon(Icons.skip_next),
-                label: const Text('Skip for Testing'),
-                style: TextButton.styleFrom(foregroundColor: red),
-              ),
-            ),
           ],
         ),
       ),
