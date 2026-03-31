@@ -13,13 +13,19 @@ final listingsStreamProvider = StreamProvider<List<Listing>>((ref) {
       .map((snapshot) {
         final List<Listing> activeListings = <Listing>[];
         for (final doc in snapshot.docs) {
-          final String status =
-              ((doc.data()['status'] as String?) ?? 'active').toLowerCase();
-          // Keep completed/sold/traded items out of the browse feed.
-          if (status == 'completed' || status == 'sold' || status == 'traded') {
+          final String status = ((doc.data()['status'] as String?) ?? 'active')
+              .toLowerCase();
+          // keep seller-hidden/deleted stuff out of the public browse feed too.
+          if (status == 'completed' ||
+              status == 'sold' ||
+              status == 'traded' ||
+              status == 'inactive' ||
+              status == 'deleted') {
             continue;
           }
-          activeListings.add(listingFromFirestoreMap(id: doc.id, data: doc.data()));
+          activeListings.add(
+            listingFromFirestoreMap(id: doc.id, data: doc.data()),
+          );
         }
         return activeListings;
       });
