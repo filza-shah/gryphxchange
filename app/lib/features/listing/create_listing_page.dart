@@ -23,8 +23,34 @@ class CreateListingPage extends StatefulWidget {
 }
 
 class _CreateListingPageState extends State<CreateListingPage> {
-  static const String _googleBooksApiKey = 'GOOGLE_BOOKS_API_KEY_HERE';
-  static const int _maxImages = 6;
+  static const String _googleBooksApiKey = 'AIzaSyBT9dVkVgkTjoNZFdXOYBw-bytus0P1BUg';
+  static const int _maxImages = 1;
+
+  // Accepted file types for listing photos.
+  static const Set<String> _validImageExtensions = <String>{
+    'jpg', 'jpeg', 'png', 'webp', 'heic', 'heif',
+  };
+
+  static bool _isValidImageType(String path) {
+    final String ext = path.split('.').last.toLowerCase();
+    return _validImageExtensions.contains(ext);
+  }
+
+  // Maps a local file path to the correct MIME type for Firebase Storage.
+  static String _mimeTypeForPath(String path) {
+    switch (path.split('.').last.toLowerCase()) {
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'heic':
+        return 'image/heic';
+      case 'heif':
+        return 'image/heif';
+      default:
+        return 'image/jpeg';
+    }
+  }
 
   static final FilteringTextInputFormatter _priceInputFormatter =
       FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}$'));
@@ -392,7 +418,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
   Future<void> _pickPhotoFromCamera() async {
     if (_remainingImageSlots <= 0) {
       setState(() {
-        _imageError = 'You can add up to $_maxImages photos per listing.';
+        _imageError = 'Only one photo is allowed. Remove the current photo to replace it.';
       });
       return;
     }
@@ -443,7 +469,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
   Future<void> _pickPhotosFromGallery() async {
     if (_remainingImageSlots <= 0) {
       setState(() {
-        _imageError = 'You can add up to $_maxImages photos per listing.';
+        _imageError = 'Only one photo is allowed. Remove the current photo to replace it.';
       });
       return;
     }
@@ -454,29 +480,25 @@ class _CreateListingPageState extends State<CreateListingPage> {
     });
 
     try {
-      final List<XFile> pickedImages = await _imagePicker.pickMultiImage(
+      final XFile? picked = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
         imageQuality: 85,
         maxWidth: 2000,
       );
 
-      if (!mounted || pickedImages.isEmpty) {
+      if (!mounted || picked == null) {
         return;
       }
 
-      final int allowedCount = pickedImages.length > _remainingImageSlots
-          ? _remainingImageSlots
-          : pickedImages.length;
+      if (!_isValidImageType(picked.path)) {
+        setState(() {
+          _imageError = 'Unsupported file type. Please choose a JPEG, PNG, or WebP image.';
+        });
+        return;
+      }
 
       setState(() {
-        _images.addAll(
-          pickedImages
-              .take(allowedCount)
-              .map((pickedImage) => _ListingImage.local(pickedImage.path)),
-        );
-        if (pickedImages.length > allowedCount) {
-          _imageError =
-              'Only the first $allowedCount image(s) were added. Listings support up to $_maxImages photos.';
-        }
+        _images.add(_ListingImage.local(picked.path));
       });
     } on PlatformException catch (error) {
       if (!mounted) {
@@ -538,13 +560,16 @@ class _CreateListingPageState extends State<CreateListingPage> {
         continue;
       }
 
+      final String ext = image.value.split('.').last.toLowerCase();
+      final String safeExt =
+          _validImageExtensions.contains(ext) ? ext : 'jpg';
       final Reference reference = FirebaseStorage.instance.ref().child(
-        'listings/$userId/$listingId/${uploadBatchId}_$index.jpg',
+        'listings/$userId/$listingId/${uploadBatchId}_$index.$safeExt',
       );
 
       await reference.putFile(
         File(image.value),
-        SettableMetadata(contentType: 'image/jpeg'),
+        SettableMetadata(contentType: _mimeTypeForPath(image.value)),
       );
       imageUrls.add(await reference.getDownloadURL());
     }
@@ -699,6 +724,28 @@ class _CreateListingPageState extends State<CreateListingPage> {
         ),
       );
       context.go(_isEditing ? '/profile' : '/home');
+    } on FirebaseException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      final String lowerMessage = (error.message ?? '').toLowerCase();
+      final String message;
+      if (error.plugin == 'firebase_storage' &&
+          (lowerMessage.contains('app check') ||
+              lowerMessage.contains('placeholder token'))) {
+        message =
+            'Image upload is blocked by Firebase App Check. Verify App Check is enabled in the app and that this device is allowed.';
+      } else if (error.plugin == 'firebase_storage' &&
+          (error.code == 'unauthorized' || lowerMessage.contains('permission'))) {
+        message =
+            'Image upload was denied by storage rules. Please check your permissions and try again.';
+      } else {
+        message =
+            'Unable to upload the listing image right now (${error.code}). Please try again.';
+      }
+      setState(() {
+        _submitError = message;
+      });
     } catch (_) {
       if (!mounted) {
         return;
@@ -883,7 +930,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: <Widget>[
                     const Text(
-                      'Photos',
+                      'Photo',
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                     Text(
@@ -917,7 +964,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
                             ? null
                             : _pickPhotosFromGallery,
                         icon: const Icon(Icons.photo_library_outlined),
-                        label: const Text('Upload Photos'),
+                        label: const Text('Upload Photo'),
                       ),
                     ),
                   ],

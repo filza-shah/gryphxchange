@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../services/workflow/workflow_state.dart';
 import '../../models/display_trade.dart';
 
 class TransactionCard extends StatelessWidget {
@@ -8,11 +9,42 @@ class TransactionCard extends StatelessWidget {
 
   const TransactionCard({super.key, required this.trade});
 
+  Color _statusColor() {
+    switch (trade.workflowStatus) {
+      case WorkflowTradeStatus.accepted:
+        return const Color(0xFF1B5E20);
+      case WorkflowTradeStatus.scheduled:
+        return const Color(0xFF0D47A1);
+      case WorkflowTradeStatus.ready:
+        return const Color(0xFF8B0000);
+      case WorkflowTradeStatus.completed:
+        return const Color(0xFF01579B);
+      case WorkflowTradeStatus.pending:
+        return const Color(0xFF6A4B00);
+    }
+  }
+
+  IconData _statusIcon() {
+    switch (trade.workflowStatus) {
+      case WorkflowTradeStatus.accepted:
+        return Icons.check_circle;
+      case WorkflowTradeStatus.scheduled:
+        return Icons.event_available;
+      case WorkflowTradeStatus.ready:
+        return Icons.handshake;
+      case WorkflowTradeStatus.completed:
+        return Icons.task_alt;
+      case WorkflowTradeStatus.pending:
+        return Icons.hourglass_top;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final red = const Color(0xFF8B0000);
     final gold = const Color(0xFFFFD700);
+    final Color statusColor = _statusColor();
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -21,7 +53,6 @@ class TransactionCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Item title
             Text(
               trade.itemTitle,
               style: theme.textTheme.titleMedium?.copyWith(
@@ -29,13 +60,11 @@ class TransactionCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-
-            // User row with avatar and name
             Row(
               children: [
                 CircleAvatar(
                   radius: 16,
-                  backgroundColor: red.withOpacity(0.1),
+                  backgroundColor: red.withValues(alpha: 0.1),
                   child: Text(
                     trade.otherUserInitial,
                     style: TextStyle(color: red, fontWeight: FontWeight.bold),
@@ -46,8 +75,6 @@ class TransactionCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-
-            // Status line
             Row(
               children: [
                 Icon(
@@ -66,46 +93,61 @@ class TransactionCard extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(_statusIcon(), color: statusColor),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          trade.statusText,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: statusColor,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          trade.statusDescription,
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
-
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {
-                      debugPrint('Open Trade Center for ${trade.id}');
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: red,
-                      side: BorderSide(color: red),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text('Trade Center'),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () {
+                  context.push(
+                    '/verify-handshake/${trade.id}',
+                    extra: trade,
+                  );
+                },
+                icon: const Icon(Icons.open_in_new),
+                label: Text(trade.primaryActionLabel),
+                style: FilledButton.styleFrom(
+                  backgroundColor: red,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: () {
-                      // Navigate to verify handshake flow
-                      context.push(
-                        '/verify-handshake/${trade.id}',
-                        extra: trade,
-                      );
-                    },
-                    style: FilledButton.styleFrom(
-                      backgroundColor: red,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text('Verify'),
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),

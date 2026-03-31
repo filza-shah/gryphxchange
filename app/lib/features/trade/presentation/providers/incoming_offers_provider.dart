@@ -11,6 +11,7 @@ class IncomingOffer {
     required this.listingId,
     required this.listingTitle,
     required this.buyerId,
+    required this.buyerName,
     required this.offerType,
     required this.amount,
     required this.message,
@@ -21,6 +22,7 @@ class IncomingOffer {
   final String listingId;
   final String listingTitle;
   final String buyerId;
+  final String buyerName;
   final String offerType;
   final double? amount;
   final String message;
@@ -41,6 +43,34 @@ final incomingOffersProvider = StreamProvider<List<IncomingOffer>>((ref) {
       .where('status', isEqualTo: 'pending')
       .snapshots()
       .asyncMap((QuerySnapshot<Map<String, dynamic>> snapshot) async {
+        // Resolve buyer names once per snapshot so card rendering stays simple.
+        final Set<String> buyerIds = snapshot.docs
+            .map((doc) => (doc.data()['buyerId'] as String?) ?? '')
+            .where((buyerId) => buyerId.isNotEmpty)
+            .toSet();
+
+        final Map<String, String> buyerNamesById = <String, String>{};
+        await Future.wait<void>(
+          buyerIds.map((String buyerId) async {
+            final DocumentSnapshot<Map<String, dynamic>> userDoc =
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(buyerId)
+                    .get();
+
+            final Map<String, dynamic> userData =
+                userDoc.data() ?? <String, dynamic>{};
+            final String name = ((userData['name'] as String?) ??
+                    (userData['displayName'] as String?) ??
+                    (userData['fullName'] as String?) ??
+                    (userData['username'] as String?) ??
+                    '')
+                .trim();
+            buyerNamesById[buyerId] =
+                name.isNotEmpty ? name : 'Unknown buyer';
+          }),
+        );
+
         // Each offer is enriched with listing title so cards stay self-contained.
         final List<IncomingOffer?> offers = await Future.wait<IncomingOffer?>(
           snapshot.docs.map((doc) async {
@@ -71,7 +101,10 @@ final incomingOffersProvider = StreamProvider<List<IncomingOffer>>((ref) {
               // Keep cards readable if listing doc is deleted/missing title.
               listingTitle:
                   (listingData['title'] as String?) ?? 'Untitled Listing',
-              buyerId: (data['buyerId'] as String?) ?? 'Unknown buyer',
+              buyerId: (data['buyerId'] as String?) ?? '',
+              buyerName:
+                buyerNamesById[(data['buyerId'] as String?) ?? ''] ??
+                'Unknown buyer',
               // UI relies on lowercase status/type strings for simple comparisons.
               offerType: ((data['offerType'] as String?) ?? 'cash').toLowerCase(),
               amount: (data['amount'] as num?)?.toDouble(),

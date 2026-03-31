@@ -444,50 +444,36 @@ class ProfilePage extends ConsumerWidget {
                                             '/listing/${listing.id}',
                                           );
                                         },
-                                        child: Row(
-                                          children: <Widget>[
-                                            ClipRRect(
-                                              borderRadius:
-                                                  const BorderRadius.only(
-                                                    topLeft: Radius.circular(
-                                                      12,
-                                                    ),
-                                                    bottomLeft: Radius.circular(
-                                                      12,
-                                                    ),
+                                        child: IntrinsicHeight(
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.stretch,
+                                            children: <Widget>[
+                                              SizedBox(
+                                                width: 92,
+                                                child: ClipRRect(
+                                                  borderRadius:
+                                                      const BorderRadius.only(
+                                                        topLeft:
+                                                            Radius.circular(12),
+                                                        bottomLeft:
+                                                            Radius.circular(12),
+                                                      ),
+                                                  child: _ProfileListingThumbnail(
+                                                    imagePathOrUrl:
+                                                        previewImage,
                                                   ),
-                                              child: Image.network(
-                                                previewImage,
-                                                width: 80,
-                                                height: 80,
-                                                fit: BoxFit.cover,
-                                                // lil fallback here so busted image urls
-                                                // don't nuke the whole listing row.
-                                                errorBuilder: (_, _, _) {
-                                                  return Container(
-                                                    width: 80,
-                                                    height: 80,
-                                                    color: Colors.grey.shade200,
-                                                    alignment: Alignment.center,
-                                                    child: Icon(
-                                                      Icons
-                                                          .image_not_supported_outlined,
-                                                      color:
-                                                          Colors.grey.shade600,
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                            ),
-                                            Expanded(
-                                              child: Padding(
-                                                padding: const EdgeInsets.all(
-                                                  12,
                                                 ),
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: <Widget>[
+                                              ),
+                                              Expanded(
+                                                child: Padding(
+                                                  padding:
+                                                      const EdgeInsets.all(12),
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: <Widget>[
                                                     // quick seller controls live right beside each card,
                                                     // so managing your own listings stays dead simple.
                                                     Row(
@@ -578,11 +564,12 @@ class ProfilePage extends ConsumerWidget {
                                                         fontSize: 20,
                                                       ),
                                                     ),
-                                                  ],
+                                                    ],
+                                                  ),
                                                 ),
                                               ),
-                                            ),
-                                          ],
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     );
@@ -689,6 +676,72 @@ class ProfilePage extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _ProfileListingThumbnail extends StatelessWidget {
+  const _ProfileListingThumbnail({required this.imagePathOrUrl});
+
+  final String imagePathOrUrl;
+
+  Future<String?> _resolveImageUrl() async {
+    final String value = imagePathOrUrl.trim();
+    if (value.isEmpty) {
+      return null;
+    }
+
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
+
+    try {
+      // Some older docs store Storage paths instead of public download URLs.
+      if (value.startsWith('gs://')) {
+        return await FirebaseStorage.instance.refFromURL(value).getDownloadURL();
+      }
+
+      if (!value.contains('://')) {
+        return await FirebaseStorage.instance.ref(value).getDownloadURL();
+      }
+    } catch (_) {
+      return null;
+    }
+
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String?>(
+      future: _resolveImageUrl(),
+      builder: (BuildContext context, AsyncSnapshot<String?> snapshot) {
+        final String? resolvedUrl = snapshot.data;
+        if (resolvedUrl == null || resolvedUrl.isEmpty) {
+          return _thumbnailFallback(context);
+        }
+
+        return SizedBox.expand(
+          child: Image.network(
+            resolvedUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => _thumbnailFallback(context),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _thumbnailFallback(BuildContext context) {
+    return SizedBox.expand(
+      child: Container(
+        color: Colors.grey.shade200,
+        alignment: Alignment.center,
+        child: Icon(
+          Icons.image_not_supported_outlined,
+          color: Colors.grey.shade600,
+        ),
+      ),
     );
   }
 }

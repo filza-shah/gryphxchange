@@ -23,6 +23,18 @@ Listing listingFromFirestoreMap({
       ? priceData.toDouble()
       : double.tryParse(priceData?.toString() ?? '');
 
+    final List<String> images = ((data['images'] as List<dynamic>?) ??
+          (data['imageUrls'] as List<dynamic>?) ??
+          const <dynamic>[])
+      .whereType<String>()
+      .where((String value) => value.trim().isNotEmpty)
+      .toList();
+  final String singleImage =
+      ((data['imageUrl'] as String?) ?? (data['image'] as String?) ?? '').trim();
+  if (images.isEmpty && singleImage.isNotEmpty) {
+    images.add(singleImage);
+  }
+
   return Listing(
     id: id,
     title: (data['title'] as String?) ?? 'Untitled Listing',
@@ -33,9 +45,7 @@ Listing listingFromFirestoreMap({
         (data['tradeFor'] as String?) ?? (data['tradeForDescription'] as String?),
     courseCode: (data['courseCode'] as String?) ?? 'N/A',
     semester: (data['semester'] as String?) ?? 'N/A',
-    images: ((data['images'] as List<dynamic>?) ?? const <dynamic>[])
-        .whereType<String>()
-        .toList(),
+    images: images,
     sellerId: (data['sellerId'] as String?) ?? (data['userId'] as String?) ?? 'unknown',
     seller: AppUser(
       id: (sellerMap['id'] as String?) ??

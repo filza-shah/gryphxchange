@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/command/command_center_page.dart';
 import '../../features/auth/login_page.dart';
@@ -58,7 +59,33 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/verify-handshake/:tradeId',
         builder: (context, state) {
-          final trade = state.extra as DisplayTrade;
+          final DisplayTrade? trade = state.extra is DisplayTrade
+              ? state.extra as DisplayTrade
+              : null;
+          if (trade == null) {
+            return Scaffold(
+              appBar: AppBar(title: const Text('Complete Trade')),
+              body: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      const Text(
+                        'This verification link is missing trade details.',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton(
+                        onPressed: () => context.go('/trades'),
+                        child: const Text('Back to Trades'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
           return VerifyHandshakeScreen(trade: trade);
         },
       ),

@@ -30,6 +30,8 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
   String _selectedTradeItem = '';
   String _meetupLocation = '';
   bool _isSubmittingOffer = false;
+  // Cache user names while rendering cards to avoid repeated user lookups.
+  final Map<String, String> _userNameCache = <String, String>{};
   // Track per-offer mutations so buttons can show local loading states.
   String _acceptingOfferId = '';
   String _rejectingOfferId = '';
@@ -78,6 +80,33 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
     // Cash offers require a positive number before enabling submit.
     final double? amount = double.tryParse(_cashAmountController.text.trim());
     return amount != null && amount > 0;
+  }
+
+  Future<String> _resolveUserName(String userId) async {
+    if (userId.isEmpty || userId == 'unknown') {
+      return 'Unknown buyer';
+    }
+
+    final String? cached = _userNameCache[userId];
+    if (cached != null && cached.isNotEmpty) {
+      return cached;
+    }
+
+    final DocumentSnapshot<Map<String, dynamic>> userDoc =
+        await FirebaseFirestore.instance.collection('users').doc(userId).get();
+    final Map<String, dynamic> userData =
+        userDoc.data() ?? <String, dynamic>{};
+
+    final String name = ((userData['name'] as String?) ??
+            (userData['displayName'] as String?) ??
+            (userData['fullName'] as String?) ??
+            (userData['username'] as String?) ??
+            '')
+        .trim();
+
+    final String resolved = name.isEmpty ? 'Unknown buyer' : name;
+    _userNameCache[userId] = resolved;
+    return resolved;
   }
 
   Future<void> _submitOffer(Listing listing) async {
@@ -222,7 +251,7 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
       final TransactionMode mode =
           offerType == 'trade' ? TransactionMode.trade : TransactionMode.sale;
 
-      ref.read(workflowControllerProvider).addPendingTrade(offerId, mode);
+      ref.read(workflowControllerProvider).addAcceptedTrade(offerId, mode);
       ref.invalidate(displayTradesProvider);
 
       if (!mounted) {
@@ -230,7 +259,7 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Offer accepted. Trade is now pending.')),
+        const SnackBar(content: Text('Offer accepted. Trade is now active.')),
       );
       context.go('/trades');
     } catch (_) {
@@ -480,9 +509,16 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
           Row(
             children: <Widget>[
               Expanded(
-                child: Text(
-                  'Buyer: $buyerId',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+                child: FutureBuilder<String>(
+                  future: _resolveUserName(buyerId),
+                  builder: (context, snapshot) {
+                    final String buyerName =
+                        snapshot.data ?? 'Loading buyer...';
+                    return Text(
+                      'Buyer: $buyerName',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    );
+                  },
                 ),
               ),
               Chip(
@@ -581,7 +617,49 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
 
         final DocumentSnapshot<Map<String, dynamic>>? document = snapshot.data;
         if (document == null || !document.exists) {
-          return const Scaffold(body: Center(child: Text('Listing not found')));
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('Listing Unavailable'),
+            ),
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    const Icon(
+                      Icons.search_off,
+                      size: 48,
+                      color: Color(0xFF8B0000),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'That listing was not found.',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'It may have been removed or the link is no longer valid.',
+                      style: TextStyle(color: Colors.grey.shade700),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: () => context.go('/home'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF8B0000),
+                      ),
+                      child: const Text('Back to Home'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
         }
 
         final Listing listing = listingFromFirestoreMap(
