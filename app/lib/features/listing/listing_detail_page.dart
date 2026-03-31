@@ -581,7 +581,49 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
 
         final DocumentSnapshot<Map<String, dynamic>>? document = snapshot.data;
         if (document == null || !document.exists) {
-          return const Scaffold(body: Center(child: Text('Listing not found')));
+          return Scaffold(
+            appBar: AppBar(
+              title: const Text('Listing Unavailable'),
+            ),
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    const Icon(
+                      Icons.search_off,
+                      size: 48,
+                      color: Color(0xFF8B0000),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'That listing was not found.',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'It may have been removed or the link is no longer valid.',
+                      style: TextStyle(color: Colors.grey.shade700),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: () => context.go('/home'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF8B0000),
+                      ),
+                      child: const Text('Back to Home'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
         }
 
         final Listing listing = listingFromFirestoreMap(
