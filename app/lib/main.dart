@@ -25,16 +25,16 @@ Future<void> main() async {
 
   // App Check is enabled on mobile platforms. Web requires its own reCAPTCHA
   // provider configuration, so we skip it here until a site key is set up.
-  if (!kIsWeb) {
-    await FirebaseAppCheck.instance.activate(
-      androidProvider: kReleaseMode
-          ? AndroidProvider.playIntegrity
-          : AndroidProvider.debug,
-      appleProvider: kReleaseMode
-          ? AppleProvider.appAttestWithDeviceCheckFallback
-          : AppleProvider.debug,
-    );
-  }
+  // if (!kIsWeb) {
+  //   await FirebaseAppCheck.instance.activate(
+  //     androidProvider: kReleaseMode
+  //         ? AndroidProvider.playIntegrity
+  //         : AndroidProvider.debug,
+  //     appleProvider: kReleaseMode
+  //         ? AppleProvider.appAttestWithDeviceCheckFallback
+  //         : AppleProvider.debug,
+  //   );
+  // }
 
   final WorkflowController workflowController = WorkflowController();
   await workflowController.init();

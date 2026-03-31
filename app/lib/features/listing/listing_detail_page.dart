@@ -251,7 +251,7 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
       final TransactionMode mode =
           offerType == 'trade' ? TransactionMode.trade : TransactionMode.sale;
 
-      ref.read(workflowControllerProvider).addPendingTrade(offerId, mode);
+      ref.read(workflowControllerProvider).addAcceptedTrade(offerId, mode);
       ref.invalidate(displayTradesProvider);
 
       if (!mounted) {
@@ -259,7 +259,7 @@ class _ListingDetailPageState extends ConsumerState<ListingDetailPage> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Offer accepted. Trade is now pending.')),
+        const SnackBar(content: Text('Offer accepted. Trade is now active.')),
       );
       context.go('/trades');
     } catch (_) {

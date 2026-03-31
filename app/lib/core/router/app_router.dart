@@ -64,7 +64,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               : null;
           if (trade == null) {
             return Scaffold(
-              appBar: AppBar(title: const Text('Verify Handshake')),
+              appBar: AppBar(title: const Text('Complete Trade')),
               body: Center(
                 child: Padding(
                   padding: const EdgeInsets.all(24),

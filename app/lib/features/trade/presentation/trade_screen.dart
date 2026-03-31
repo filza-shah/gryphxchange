@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/app_bottom_nav.dart';
+import '../../../services/workflow/workflow_state.dart';
 import '../models/display_trade.dart';
 import 'providers/incoming_offers_provider.dart';
 import 'providers/sent_offers_provider.dart';
@@ -428,9 +429,70 @@ class _SentOfferCard extends StatelessWidget {
   final SentOffer offer;
   final VoidCallback onOpenListing;
 
+  bool get _isActiveOffer =>
+      const <String>{'accepted', 'in_progress', 'scheduled', 'ready'}
+          .contains(offer.status);
+
+  WorkflowTradeStatus _workflowStatusForOffer() {
+    switch (offer.status) {
+      case 'ready':
+        return WorkflowTradeStatus.ready;
+      case 'scheduled':
+        return WorkflowTradeStatus.scheduled;
+      case 'accepted':
+      case 'in_progress':
+        return WorkflowTradeStatus.accepted;
+      case 'completed':
+        return WorkflowTradeStatus.completed;
+      case 'rejected':
+      case 'pending':
+        return WorkflowTradeStatus.pending;
+      default:
+        return WorkflowTradeStatus.pending;
+    }
+  }
+
+  String _activeBannerMessage() {
+    switch (offer.status) {
+      case 'scheduled':
+        return 'Your offer was accepted and the meetup has been scheduled.';
+      case 'ready':
+        return 'Everything is confirmed. You can complete this trade now.';
+      default:
+        return 'Your offer was accepted and this trade is now active.';
+    }
+  }
+
+  String _activeActionLabel() {
+    switch (offer.status) {
+      case 'ready':
+        return 'Complete Trade';
+      default:
+        return 'Open Active Trade';
+    }
+  }
+
+  DisplayTrade _displayTradeForOffer() {
+    final String sellerName = offer.sellerName.trim();
+    final String normalizedOfferType = offer.offerType.toLowerCase();
+
+    return DisplayTrade(
+      id: offer.id,
+      listingId: offer.listingId,
+      itemTitle: offer.listingTitle,
+      otherUserName: sellerName.isEmpty ? 'Seller' : sellerName,
+      otherUserInitial: sellerName.isEmpty
+          ? 'S'
+          : sellerName.characters.first.toUpperCase(),
+      mode: normalizedOfferType == 'trade'
+          ? TransactionMode.trade
+          : TransactionMode.sale,
+      workflowStatus: _workflowStatusForOffer(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Buyers always get status context directly on the card.
     final String typeLabel = offer.offerType.isEmpty ? 'cash' : offer.offerType;
 
     return Card(
@@ -476,14 +538,77 @@ class _SentOfferCard extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ],
-            const SizedBox(height: 10),
-            OutlinedButton(
-              onPressed: onOpenListing,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF8B0000),
-                side: const BorderSide(color: Color(0xFF8B0000)),
+            if (_isActiveOffer) ...<Widget>[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDFF5E2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Icon(
+                      Icons.check_circle,
+                      color: Color(0xFF1B5E20),
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            'Trade is active',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1B5E20),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: const Text('Open Listing'),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _activeBannerMessage(),
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: <Widget>[
+                OutlinedButton(
+                  onPressed: onOpenListing,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF8B0000),
+                    side: const BorderSide(color: Color(0xFF8B0000)),
+                  ),
+                  child: const Text('Open Listing'),
+                ),
+                if (_isActiveOffer)
+                  FilledButton.icon(
+                    onPressed: () {
+                      context.push(
+                        '/verify-handshake/${offer.id}',
+                        extra: _displayTradeForOffer(),
+                      );
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF8B0000),
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: const Icon(Icons.open_in_new),
+                    label: Text(_activeActionLabel()),
+                  ),
+              ],
             ),
           ],
         ),
@@ -499,32 +624,47 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Keep chip color mapping in one place for status consistency.
     late final Color bg;
     late final Color fg;
+    late final String label;
 
     switch (status) {
       case 'accepted':
+      case 'in_progress':
         bg = const Color(0xFFDFF5E2);
         fg = const Color(0xFF1B5E20);
+        label = 'TRADE ACTIVE';
+        break;
+      case 'scheduled':
+        bg = const Color(0xFFE3F2FD);
+        fg = const Color(0xFF0D47A1);
+        label = 'MEETUP SET';
+        break;
+      case 'ready':
+        bg = const Color(0xFFFFE0E0);
+        fg = const Color(0xFF8B0000);
+        label = 'READY TO FINISH';
         break;
       case 'completed':
         bg = const Color(0xFFE1F5FE);
         fg = const Color(0xFF01579B);
+        label = 'COMPLETED';
         break;
       case 'rejected':
         bg = const Color(0xFFFFE0E0);
         fg = const Color(0xFF8B0000);
+        label = 'NOT ACCEPTED';
         break;
       default:
         bg = const Color(0xFFFFF3CD);
         fg = const Color(0xFF6A4B00);
+        label = 'PENDING';
         break;
     }
 
     return Chip(
       label: Text(
-        status.toUpperCase(),
+        label,
         style: TextStyle(color: fg, fontWeight: FontWeight.w700),
       ),
       backgroundColor: bg,

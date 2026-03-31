@@ -42,15 +42,44 @@ class DisplayTrade {
   String get statusText {
     switch (workflowStatus) {
       case WorkflowTradeStatus.ready:
-        return 'Ready to Verify';
+        return 'Ready to complete';
       case WorkflowTradeStatus.accepted:
-        return 'Accepted';
+        return 'Offer accepted';
       case WorkflowTradeStatus.pending:
-        return 'Pending';
+        return 'Awaiting response';
       case WorkflowTradeStatus.scheduled:
-        return 'Scheduled';
+        return 'Meetup scheduled';
       case WorkflowTradeStatus.completed:
         return 'Completed';
+    }
+  }
+
+  String get statusDescription {
+    switch (workflowStatus) {
+      case WorkflowTradeStatus.ready:
+        return 'Everything is confirmed. Finish the exchange when you meet.';
+      case WorkflowTradeStatus.accepted:
+        return 'Your offer was accepted and the trade is now active.';
+      case WorkflowTradeStatus.pending:
+        return 'This trade is still waiting on the next response.';
+      case WorkflowTradeStatus.scheduled:
+        return 'The trade is active and the meetup has been arranged.';
+      case WorkflowTradeStatus.completed:
+        return 'This transaction has already been completed.';
+    }
+  }
+
+  String get primaryActionLabel {
+    switch (workflowStatus) {
+      case WorkflowTradeStatus.ready:
+        return 'Complete Trade';
+      case WorkflowTradeStatus.accepted:
+      case WorkflowTradeStatus.scheduled:
+        return 'Open Active Trade';
+      case WorkflowTradeStatus.pending:
+        return 'Review Trade';
+      case WorkflowTradeStatus.completed:
+        return 'View Trade Details';
     }
   }
 

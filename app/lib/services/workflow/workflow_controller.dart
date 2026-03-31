@@ -143,8 +143,8 @@ class WorkflowController extends ChangeNotifier {
     _notifyAndSave();
   }
 
-  /// Adds a new trade to workflow state as pending, if it does not already exist.
-  void addPendingTrade(String tradeId, TransactionMode mode) {
+  /// Adds a newly accepted trade to workflow state, if it does not already exist.
+  void addAcceptedTrade(String tradeId, TransactionMode mode) {
     if (_state.tradeStates.containsKey(tradeId)) {
       return;
     }
@@ -155,7 +155,7 @@ class WorkflowController extends ChangeNotifier {
         tradeId: WorkflowTradeState(
           tradeId: tradeId,
           mode: mode,
-          status: WorkflowTradeStatus.pending,
+          status: WorkflowTradeStatus.accepted,
           meetupLocation: null,
           meetupTime: null,
           matchesFound: 0,

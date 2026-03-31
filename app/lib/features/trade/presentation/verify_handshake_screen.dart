@@ -296,7 +296,7 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
           qrData: sellerCode,
           title: 'Show Your QR Code',
           description:
-              'Buyer scans first. Ask the buyer to open Verify Handshake and scan this code.',
+              'Buyer scans first. Ask the buyer to open Complete Trade and scan this code.',
           statusText: 'Waiting for buyer to scan your QR code.',
           footerText: 'Order ID: ${widget.trade.id}',
         );
@@ -371,7 +371,7 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
               icon: const Icon(Icons.arrow_back),
               onPressed: () => Navigator.of(context).pop(),
             ),
-            title: const Text('Verify Handshake'),
+            title: const Text('Complete Trade'),
             actions: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
