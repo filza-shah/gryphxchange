@@ -308,6 +308,8 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
             'Buyer scans first. Use your camera to scan the seller\'s QR code.',
         expectedQrData: sellerCode,
         onScanned: (_) => _markBuyerScannedSeller(),
+        onSkip: () => _markBuyerScannedSeller(),
+        skipButtonLabel: 'Skip Seller Scan (Demo)',
       );
     }
 
@@ -338,6 +340,18 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
         );
         ref.invalidate(displayTradesProvider);
       },
+      onSkip: () async {
+        await _markSellerScannedBuyer();
+
+        final workflowController = ref.read(workflowControllerProvider);
+        workflowController.completeTransaction(
+          widget.trade.id,
+          widget.trade.listingId,
+          widget.trade.mode,
+        );
+        ref.invalidate(displayTradesProvider);
+      },
+      skipButtonLabel: 'Skip Buyer Scan (Demo)',
     );
   }
 

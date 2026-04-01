@@ -6,6 +6,8 @@ class ScanVerifyStep extends StatefulWidget {
   final String description;
   final String expectedQrData;
   final Future<void> Function(String scannedData) onScanned;
+  final Future<void> Function()? onSkip;
+  final String? skipButtonLabel;
 
   const ScanVerifyStep({
     super.key,
@@ -13,6 +15,8 @@ class ScanVerifyStep extends StatefulWidget {
     required this.description,
     required this.expectedQrData,
     required this.onScanned,
+    this.onSkip,
+    this.skipButtonLabel,
   });
 
   @override
@@ -121,6 +125,52 @@ class _ScanVerifyStepState extends State<ScanVerifyStep> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('QR code verified successfully'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _handleSkip() async {
+    final Future<void> Function()? onSkip = widget.onSkip;
+    if (onSkip == null || _isProcessingScan || _scanVerified) {
+      return;
+    }
+
+    setState(() {
+      _isProcessingScan = true;
+      _statusMessage = 'Skipping scan...';
+    });
+
+    await _scannerController.stop();
+
+    try {
+      await onSkip();
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      await _scannerController.start();
+      setState(() {
+        _isProcessingScan = false;
+        _statusMessage = 'Unable to skip right now. Please try again.';
+      });
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _scanVerified = true;
+      _isProcessingScan = false;
+      _statusMessage = 'Scan skipped for demo. Continuing workflow...';
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Scan skipped for demo'),
         duration: Duration(seconds: 2),
       ),
     );
@@ -255,6 +305,16 @@ class _ScanVerifyStepState extends State<ScanVerifyStep> {
               ),
               textAlign: TextAlign.center,
             ),
+            if (widget.onSkip != null) ...<Widget>[
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: _isProcessingScan || _scanVerified
+                    ? null
+                    : _handleSkip,
+                icon: const Icon(Icons.skip_next),
+                label: Text(widget.skipButtonLabel ?? 'Skip for Demo'),
+              ),
+            ],
             const SizedBox(height: 32),
           ],
         ),
