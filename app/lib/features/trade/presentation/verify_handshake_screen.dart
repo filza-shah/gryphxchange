@@ -34,7 +34,8 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
 
   Future<void> _ensureVerificationInitialized() async {
     final offerSnapshot = await _offerRef.get();
-    final Map<String, dynamic> offer = offerSnapshot.data() ?? <String, dynamic>{};
+    final Map<String, dynamic> offer =
+        offerSnapshot.data() ?? <String, dynamic>{};
 
     final String sellerId = (offer['sellerId'] as String?) ?? '';
     final String buyerId = (offer['buyerId'] as String?) ?? '';
@@ -70,8 +71,8 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
     final FirebaseFirestore firestore = FirebaseFirestore.instance;
 
     await firestore.runTransaction((transaction) async {
-      final DocumentSnapshot<Map<String, dynamic>> snapshot =
-          await transaction.get(_offerRef);
+      final DocumentSnapshot<Map<String, dynamic>> snapshot = await transaction
+          .get(_offerRef);
       final Map<String, dynamic> offer = snapshot.data() ?? <String, dynamic>{};
       final String phase =
           ((offer['verificationPhase'] as String?) ?? 'buyer_scans_seller');
@@ -94,8 +95,9 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
 
   Future<void> _completeVerification({required bool skipQrVerification}) async {
     final FirebaseFirestore firestore = FirebaseFirestore.instance;
-    final DocumentReference<Map<String, dynamic>> listingRef =
-        firestore.collection('listings').doc(widget.trade.listingId);
+    final DocumentReference<Map<String, dynamic>> listingRef = firestore
+        .collection('listings')
+        .doc(widget.trade.listingId);
     final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     await firestore.runTransaction((transaction) async {
@@ -137,7 +139,11 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
             FieldValue.serverTimestamp();
       }
 
-      transaction.set(_offerRef, offerCompletionUpdate, SetOptions(merge: true));
+      transaction.set(
+        _offerRef,
+        offerCompletionUpdate,
+        SetOptions(merge: true),
+      );
 
       transaction.set(listingRef, <String, dynamic>{
         'status': 'completed',
@@ -146,17 +152,16 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
 
       final Set<String> completedCountedFor =
           (((offer['completedTradesCountedFor'] as List<dynamic>?) ??
-                      const <dynamic>[])
-                  .whereType<String>()
-                  .toSet());
+                  const <dynamic>[])
+              .whereType<String>()
+              .toSet());
 
+      // Keep all transaction reads ahead of writes; using atomic increments here
+      // avoids the read-after-write failure that blocked the seller verification step.
       if (sellerId.isNotEmpty && !completedCountedFor.contains(sellerId)) {
         final sellerRef = firestore.collection('users').doc(sellerId);
-        final sellerSnapshot = await transaction.get(sellerRef);
-        final int sellerCompleted =
-            (sellerSnapshot.data()?['completedTrades'] as num?)?.toInt() ?? 0;
         transaction.set(sellerRef, <String, dynamic>{
-          'completedTrades': sellerCompleted + 1,
+          'completedTrades': FieldValue.increment(1),
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
         completedCountedFor.add(sellerId);
@@ -164,18 +169,17 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
 
       if (buyerId.isNotEmpty && !completedCountedFor.contains(buyerId)) {
         final buyerRef = firestore.collection('users').doc(buyerId);
-        final buyerSnapshot = await transaction.get(buyerRef);
-        final int buyerCompleted =
-            (buyerSnapshot.data()?['completedTrades'] as num?)?.toInt() ?? 0;
         transaction.set(buyerRef, <String, dynamic>{
-          'completedTrades': buyerCompleted + 1,
+          'completedTrades': FieldValue.increment(1),
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
         completedCountedFor.add(buyerId);
       }
 
       transaction.set(_offerRef, <String, dynamic>{
-        'completedTradesCountedFor': completedCountedFor.toList(growable: false),
+        'completedTradesCountedFor': completedCountedFor.toList(
+          growable: false,
+        ),
       }, SetOptions(merge: true));
     });
   }
@@ -208,10 +212,9 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
       final String sellerId = (latestOffer['sellerId'] as String?) ?? '';
       final String buyerId = (latestOffer['buyerId'] as String?) ?? '';
       final String currentUserId = currentUser?.uid ?? '';
-      final Map<String, dynamic> ratingsByUser =
-          Map<String, dynamic>.from(
-            (latestOffer['ratingsByUser'] as Map?) ?? const <String, dynamic>{},
-          );
+      final Map<String, dynamic> ratingsByUser = Map<String, dynamic>.from(
+        (latestOffer['ratingsByUser'] as Map?) ?? const <String, dynamic>{},
+      );
 
       if (currentUserId.isEmpty || ratingsByUser.containsKey(currentUserId)) {
         return;
@@ -249,7 +252,6 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       }
-
     });
   }
 
@@ -276,7 +278,8 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
     final String buyerId = (offer['buyerId'] as String?) ?? '';
     final String phase =
         ((offer['verificationPhase'] as String?) ?? 'buyer_scans_seller');
-    final String offerStatus = ((offer['status'] as String?) ?? '').toLowerCase();
+    final String offerStatus = ((offer['status'] as String?) ?? '')
+        .toLowerCase();
     final Map<String, dynamic> ratingsByUser = Map<String, dynamic>.from(
       (offer['ratingsByUser'] as Map?) ?? const <String, dynamic>{},
     );
@@ -290,14 +293,14 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
     final bool isBuyer = currentUserId == buyerId;
 
     if (!isSeller && !isBuyer) {
-      return const Center(
-        child: Text('You are not part of this transaction.'),
-      );
+      return const Center(child: Text('You are not part of this transaction.'));
     }
 
     final bool alreadyRated = ratingsByUser.containsKey(currentUserId);
 
-    if ((phase == 'verified' || phase == 'completed' || offerStatus == 'completed') &&
+    if ((phase == 'verified' ||
+            phase == 'completed' ||
+            offerStatus == 'completed') &&
         alreadyRated) {
       return const Center(
         child: Padding(
@@ -310,7 +313,9 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
       );
     }
 
-    if (phase == 'verified' || phase == 'completed' || offerStatus == 'completed') {
+    if (phase == 'verified' ||
+        phase == 'completed' ||
+        offerStatus == 'completed') {
       return RateCompleteStep(
         transactionId: widget.trade.id,
         onRated: (_) {},
@@ -413,9 +418,15 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
             title: const Text('Complete Trade'),
             actions: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFFD700),
                     borderRadius: BorderRadius.circular(20),
@@ -435,9 +446,7 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
           body: Column(
             children: [
               _StepIndicator(currentStepIndex: _currentStepIndex(phase)),
-              Expanded(
-                child: _buildStepContent(context, offer, currentUserId),
-              ),
+              Expanded(child: _buildStepContent(context, offer, currentUserId)),
             ],
           ),
         );
@@ -513,8 +522,8 @@ class _StepIndicator extends StatelessWidget {
                           color: isCompleted
                               ? Colors.green
                               : isCurrent
-                                  ? const Color(0xFF8B0000)
-                                  : Colors.grey[300],
+                              ? const Color(0xFF8B0000)
+                              : Colors.grey[300],
                         ),
                         child: Center(
                           child: isCompleted
@@ -543,8 +552,9 @@ class _StepIndicator extends StatelessWidget {
                   child: Text(
                     steps[index].$1,
                     style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight:
-                          isCurrent ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: isCurrent
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                       color: isCurrent
                           ? const Color(0xFF8B0000)
                           : Colors.grey[600],
