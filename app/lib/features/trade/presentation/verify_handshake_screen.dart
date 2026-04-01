@@ -89,9 +89,14 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
   }
 
   Future<void> _markSellerScannedBuyer() async {
+    await _completeVerification(skipQrVerification: false);
+  }
+
+  Future<void> _completeVerification({required bool skipQrVerification}) async {
     final FirebaseFirestore firestore = FirebaseFirestore.instance;
     final DocumentReference<Map<String, dynamic>> listingRef =
         firestore.collection('listings').doc(widget.trade.listingId);
+    final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
     await firestore.runTransaction((transaction) async {
       final offerSnapshot = await transaction.get(_offerRef);
@@ -99,22 +104,40 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
           offerSnapshot.data() ?? <String, dynamic>{};
       final String phase =
           ((offer['verificationPhase'] as String?) ?? 'buyer_scans_seller');
+      final String status = ((offer['status'] as String?) ?? '').toLowerCase();
 
-      if (phase != 'seller_scans_buyer') {
+      if (!skipQrVerification && phase != 'seller_scans_buyer') {
+        return;
+      }
+
+      if (status == 'completed') {
         return;
       }
 
       final String sellerId = (offer['sellerId'] as String?) ?? '';
       final String buyerId = (offer['buyerId'] as String?) ?? '';
 
-      transaction.set(_offerRef, <String, dynamic>{
+      final Map<String, dynamic> offerCompletionUpdate = <String, dynamic>{
         'verificationPhase': 'verified',
         'status': 'completed',
-        'sellerScannedBuyerQrAt': FieldValue.serverTimestamp(),
         'verificationCompletedAt': FieldValue.serverTimestamp(),
         'completedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      };
+
+      if (skipQrVerification) {
+        offerCompletionUpdate['qrVerificationSkipped'] = true;
+        offerCompletionUpdate['qrVerificationSkippedAt'] =
+            FieldValue.serverTimestamp();
+        if (currentUserId.isNotEmpty) {
+          offerCompletionUpdate['qrVerificationSkippedBy'] = currentUserId;
+        }
+      } else {
+        offerCompletionUpdate['sellerScannedBuyerQrAt'] =
+            FieldValue.serverTimestamp();
+      }
+
+      transaction.set(_offerRef, offerCompletionUpdate, SetOptions(merge: true));
 
       transaction.set(listingRef, <String, dynamic>{
         'status': 'completed',
@@ -155,6 +178,18 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
         'completedTradesCountedFor': completedCountedFor.toList(growable: false),
       }, SetOptions(merge: true));
     });
+  }
+
+  Future<void> _skipEntireQrVerification() async {
+    await _completeVerification(skipQrVerification: true);
+
+    final workflowController = ref.read(workflowControllerProvider);
+    workflowController.completeTransaction(
+      widget.trade.id,
+      widget.trade.listingId,
+      widget.trade.mode,
+    );
+    ref.invalidate(displayTradesProvider);
   }
 
   Future<void> _persistRatingOnly(
@@ -308,8 +343,8 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
             'Buyer scans first. Use your camera to scan the seller\'s QR code.',
         expectedQrData: sellerCode,
         onScanned: (_) => _markBuyerScannedSeller(),
-        onSkip: () => _markBuyerScannedSeller(),
-        skipButtonLabel: 'Skip Seller Scan (Demo)',
+        onSkip: _skipEntireQrVerification,
+        skipButtonLabel: 'Skip QR Verification (Demo)',
       );
     }
 
@@ -340,18 +375,8 @@ class _VerifyHandshakeScreenState extends ConsumerState<VerifyHandshakeScreen> {
         );
         ref.invalidate(displayTradesProvider);
       },
-      onSkip: () async {
-        await _markSellerScannedBuyer();
-
-        final workflowController = ref.read(workflowControllerProvider);
-        workflowController.completeTransaction(
-          widget.trade.id,
-          widget.trade.listingId,
-          widget.trade.mode,
-        );
-        ref.invalidate(displayTradesProvider);
-      },
-      skipButtonLabel: 'Skip Buyer Scan (Demo)',
+      onSkip: _skipEntireQrVerification,
+      skipButtonLabel: 'Skip QR Verification (Demo)',
     );
   }
 
