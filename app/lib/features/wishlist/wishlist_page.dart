@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/widgets/app_header.dart';
 import '../../core/widgets/app_bottom_nav.dart';
 import '../../services/workflow/workflow_controller.dart';
-import '../../services/workflow/workflow_state.dart';
 import '../../services/wishlist_firebase_service.dart';
 
 /// Main Wishlist Page - Displays user's wishlist items and matches
@@ -37,9 +36,6 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
   /// Current filter selection for matches (all, trade, sale)
   String _selectedFilter = 'all';
   
-  /// Flag to prevent double-click and show loading state
-  bool _isAdding = false;
-
   /// Cached matches future — only re-fetches when wishlist titles actually change
   Future<List<_WishlistMatch>>? _matchesFuture;
 
@@ -64,17 +60,6 @@ class _WishlistPageState extends State<WishlistPage> with SingleTickerProviderSt
   }
 
   // ==================== HELPER METHODS ====================
-
-  /// Guess category based on item title keywords
-  /// Used to auto-suggest category when adding items
-  String _guessCategory(String itemTitle) {
-    final title = itemTitle.toLowerCase();
-    if (title.contains('textbook') || title.contains('book')) return 'Textbooks';
-    if (title.contains('calc') || title.contains('calculator')) return 'Electronics';
-    if (title.contains('furniture') || title.contains('desk')) return 'Furniture';
-    if (title.contains('shirt') || title.contains('hoodie')) return 'Clothing';
-    return 'Other';
-  }
 
   /// Get icon based on category
   IconData _getCategoryIcon(String? category) {

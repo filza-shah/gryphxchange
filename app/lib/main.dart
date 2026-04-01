@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'core/providers/workflow_provider.dart';
 import 'core/router/app_router.dart';
@@ -8,7 +8,6 @@ import 'services/workflow/workflow_controller.dart';
 
 // Firebase imports
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_app_check/firebase_app_check.dart';
 import 'firebase_options.dart';
 
 // custom color constants for app theme
@@ -19,6 +18,12 @@ const Color _pageBackground = Color(0xFFF5F5F5);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (_) {
+    // Keep startup working even if a local `.env` has not been created yet.
+  }
 
   // Initialize Firebase with current platform options
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);

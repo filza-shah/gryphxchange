@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -23,12 +24,25 @@ class CreateListingPage extends StatefulWidget {
 }
 
 class _CreateListingPageState extends State<CreateListingPage> {
-  static const String _googleBooksApiKey = 'AIzaSyBT9dVkVgkTjoNZFdXOYBw-bytus0P1BUg';
   static const int _maxImages = 1;
+
+  String get _googleBooksApiKey {
+    final String booksKey = dotenv.env['GOOGLE_BOOKS_API_KEY']?.trim() ?? '';
+    if (booksKey.isNotEmpty) {
+      return booksKey;
+    }
+
+    return dotenv.env['GOOGLE_MAPS_API_KEY']?.trim() ?? '';
+  }
 
   // Accepted file types for listing photos.
   static const Set<String> _validImageExtensions = <String>{
-    'jpg', 'jpeg', 'png', 'webp', 'heic', 'heif',
+    'jpg',
+    'jpeg',
+    'png',
+    'webp',
+    'heic',
+    'heif',
   };
 
   static bool _isValidImageType(String path) {
@@ -418,7 +432,8 @@ class _CreateListingPageState extends State<CreateListingPage> {
   Future<void> _pickPhotoFromCamera() async {
     if (_remainingImageSlots <= 0) {
       setState(() {
-        _imageError = 'Only one photo is allowed. Remove the current photo to replace it.';
+        _imageError =
+            'Only one photo is allowed. Remove the current photo to replace it.';
       });
       return;
     }
@@ -469,7 +484,8 @@ class _CreateListingPageState extends State<CreateListingPage> {
   Future<void> _pickPhotosFromGallery() async {
     if (_remainingImageSlots <= 0) {
       setState(() {
-        _imageError = 'Only one photo is allowed. Remove the current photo to replace it.';
+        _imageError =
+            'Only one photo is allowed. Remove the current photo to replace it.';
       });
       return;
     }
@@ -492,7 +508,8 @@ class _CreateListingPageState extends State<CreateListingPage> {
 
       if (!_isValidImageType(picked.path)) {
         setState(() {
-          _imageError = 'Unsupported file type. Please choose a JPEG, PNG, or WebP image.';
+          _imageError =
+              'Unsupported file type. Please choose a JPEG, PNG, or WebP image.';
         });
         return;
       }
@@ -561,8 +578,7 @@ class _CreateListingPageState extends State<CreateListingPage> {
       }
 
       final String ext = image.value.split('.').last.toLowerCase();
-      final String safeExt =
-          _validImageExtensions.contains(ext) ? ext : 'jpg';
+      final String safeExt = _validImageExtensions.contains(ext) ? ext : 'jpg';
       final Reference reference = FirebaseStorage.instance.ref().child(
         'listings/$userId/$listingId/${uploadBatchId}_$index.$safeExt',
       );
@@ -736,7 +752,8 @@ class _CreateListingPageState extends State<CreateListingPage> {
         message =
             'Image upload is blocked by Firebase App Check. Verify App Check is enabled in the app and that this device is allowed.';
       } else if (error.plugin == 'firebase_storage' &&
-          (error.code == 'unauthorized' || lowerMessage.contains('permission'))) {
+          (error.code == 'unauthorized' ||
+              lowerMessage.contains('permission'))) {
         message =
             'Image upload was denied by storage rules. Please check your permissions and try again.';
       } else {
