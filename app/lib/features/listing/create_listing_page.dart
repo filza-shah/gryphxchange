@@ -23,7 +23,7 @@ class CreateListingPage extends StatefulWidget {
 }
 
 class _CreateListingPageState extends State<CreateListingPage> {
-  static const String _googleBooksApiKey = 'AIzaSyBT9dVkVgkTjoNZFdXOYBw-bytus0P1BUg';
+  static const String _googleBooksApiKey = 'GOOGLE_BOOKS_API_KEY';
   static const int _maxImages = 1;
 
   // Accepted file types for listing photos.
